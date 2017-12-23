@@ -7,6 +7,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/transform.hpp>
 #include <spdlog/spdlog.h>
+#include <variant.hpp>
 
 #include <array>
 #include <cstdio>
@@ -17,6 +18,8 @@ using namespace glm;
 
 std::shared_ptr<spdlog::logger> g_logger;
 
+// === OpenGL helpers ===
+
 #define GL_CHECK() checkLastGLError(__FILE__, __LINE__)
 void checkLastGLError(const char *file, int line)
 {
@@ -25,17 +28,6 @@ void checkLastGLError(const char *file, int line)
         g_logger->error("{} ({}): GL error {}: {}", file, line, status, gluErrorString(status));
     }
 }
-
-void errorCallback(int error, const char *description)
-{
-    g_logger->error("GLFW Error: {}", description);
-}
-
-struct CameraUIState {
-    enum { ACTION_NONE, ACTION_ZOOM, ACTION_PAN, ACTION_TUMBLE };
-};
-
-// === OpenGL RAII wrapper template ===
 
 template <typename Traits>
 class GLObject {
@@ -81,7 +73,53 @@ template <typename Traits>
 const typename GLObject<Traits>::value_type
     GLObject<Traits>::s_null_value = typename GLObject<Traits>::value_type();
 
-// === Shaders and programs ===
+struct GLFBOTraits {
+    typedef GLuint value_type;
+    static value_type create()
+    {
+        value_type res;
+        glGenFramebuffers(1, &res);
+        return res;
+    }
+    static void destroy(value_type fb) { glDeleteFramebuffers(1, &fb); }
+};
+typedef GLObject<GLFBOTraits> GLFBO;
+
+struct GLUBOTraits {
+    typedef GLuint value_type;
+    static value_type create()
+    {
+        value_type ubo;
+        glGenBuffers(1, &ubo);
+        return ubo;
+    }
+    static void destroy(value_type ubo) { glDeleteBuffers(1, &ubo); }
+};
+typedef GLObject<GLUBOTraits> GLUBO;
+
+struct GLVAOTraits {
+    typedef GLuint value_type;
+    static value_type create()
+    {
+        value_type res;
+        glGenVertexArrays(1, &res);
+        return res;
+    }
+    static void destroy(value_type vao) { glDeleteVertexArrays(1, &vao); }
+};
+typedef GLObject<GLVAOTraits> GLVAO;
+
+struct GLTextureTraits {
+    typedef GLuint value_type;
+    static value_type create()
+    {
+        value_type res;
+        glGenTextures(1, &res);
+        return res;
+    }
+    static void destroy(value_type tex) { glDeleteTextures(1, &tex); }
+};
+typedef GLObject<GLTextureTraits> GLTexture;
 
 struct GLShaderTraits {
     typedef GLuint value_type;
@@ -90,14 +128,26 @@ struct GLShaderTraits {
 };
 typedef GLObject<GLShaderTraits> GLShader;
 
+struct GLProgramTraits {
+    typedef GLuint value_type;
+    static value_type create() { return glCreateProgram(); }
+    static void destroy(value_type program) { glDeleteProgram(program); }
+};
+typedef GLObject<GLProgramTraits> GLProgram;
+
+
 GLShader createAndCompileShader(GLenum shader_type, const char *source, const char *defines = nullptr)
 {
+    GL_CHECK();
     auto shader = GLShader::create(shader_type);
+    GL_CHECK();
     if (defines) {
         const char *sources[] = { defines, source };
         glShaderSource(shader, 2, sources, NULL);
+        GL_CHECK();
     } else {
         glShaderSource(shader, 1, &source, NULL);
+        GL_CHECK();
     }
     glCompileShader(shader);
     GL_CHECK();
@@ -117,13 +167,6 @@ GLShader createAndCompileShader(GLenum shader_type, const char *source, const ch
     GL_CHECK();
     return shader;
 }
-
-struct GLProgramTraits {
-    typedef GLuint value_type;
-    static value_type create() { return glCreateProgram(); }
-    static void destroy(value_type program) { glDeleteProgram(program); }
-};
-typedef GLObject<GLProgramTraits> GLProgram;
 
 GLProgram createAndLinkProgram(const std::vector<GLShader> &shaders)
 {
@@ -149,34 +192,6 @@ GLProgram createAndLinkProgram(const std::vector<GLShader> &shaders)
     GL_CHECK();
     return program;
 }
-
-// === Uniform Buffer Object wrapper ===
-
-struct GLUBOTraits {
-    typedef GLuint value_type;
-    static value_type create()
-    {
-        value_type ubo;
-        glGenBuffers(1, &ubo);
-        return ubo;
-    }
-    static void destroy(value_type ubo) { glDeleteBuffers(1, &ubo); }
-};
-typedef GLObject<GLUBOTraits> GLUBO;
-
-// === Vertex Array Object wrapper ===
-
-struct GLVAOTraits {
-    typedef GLuint value_type;
-    static value_type create()
-    {
-        value_type res;
-        glGenVertexArrays(1, &res);
-        return res;
-    }
-    static void destroy(value_type vao) { glDeleteVertexArrays(1, &vao); }
-};
-typedef GLObject<GLVAOTraits> GLVAO;
 
 // === Misc utility ===
 
@@ -210,7 +225,7 @@ struct CommonUniforms {
 
 static std::string common_shader_code = R"glsl(
     #version 430
-    layout(std140) uniform CommonUniforms {
+    layout(shared) uniform CommonUniforms {
         vec3 eye_pos;
         vec3 eye_dir;
         mat4 mvp;
@@ -289,96 +304,119 @@ static GLVAO createCubeVAO()
     return cube_vao;
 }
 
-// === Framebuffer state ===
+// === Framebuffer ===
 
-struct FramebufferState {
+struct Framebuffer {
     int width, height;
-    GLuint fbo;
-    FramebufferState() : width(0), height(0), fbo(0) {}
+    GLFBO fbo;
+    GLTexture color_texture, depth_texture;
+    Framebuffer() : width(0), height(0) {}
+    void init(int width, int height);
 };
-static FramebufferState g_fbstate;
 
-static void framebufferResizedCallback(GLFWwindow *, int width, int height)
+void Framebuffer::init(int width, int height)
 {
-    glViewport(0, 0, width, height);
+    this->width = width;
+    this->height = height;
 
     // Setup fbo with floating-point depth.
-    GLuint fbo;
-    {
-        GLuint color, depth;
 
-        glGenTextures(1, &color);
-        glBindTexture(GL_TEXTURE_2D, color);
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_SRGB8_ALPHA8, width, height);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    color_texture = GLTexture::create();
+    glBindTexture(GL_TEXTURE_2D, color_texture);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_SRGB8_ALPHA8, width, height);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-        glGenTextures(1, &depth);
-        glBindTexture(GL_TEXTURE_2D, depth);
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32F, width, height);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    depth_texture = GLTexture::create();
+    glBindTexture(GL_TEXTURE_2D, depth_texture);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32F, width, height);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-        glGenFramebuffers(1, &fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            g_logger->error("glCheckFramebufferStatus: {}", status);
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    fbo = GLFBO::create();
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        g_logger->error("glCheckFramebufferStatus: {}", status);
     }
-
-    g_fbstate.width = width;
-    g_fbstate.height = height;
-    g_fbstate.fbo = fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-// === Camera state ===
+// === Camera ===
 
-struct CameraState {
+struct Camera {
+    glm::quat orientation;
     glm::vec3 eye_pos;
-    glm::vec3 eye_dir;
     float pivot_distance;
+
+    Camera() : pivot_distance(1) {}
+    glm::vec3 getForwardVector() const;
 };
 
-class CameraController {
-public:
-    CameraController(GLFWwindow *window) : mWindow(window), mCamera(nullptr) {}
+glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm::vec3(0, 0, -1)); }
 
-    void mouseDrag(const vec2 &mousePos, bool leftDown, bool middleDown, bool rightDown);
+// Modified version of cinder's CameraUI class (https://github.com/cinder/Cinder).
+
+class CameraUI {
+public:
+    CameraUI(GLFWwindow *window = nullptr)
+        : mWindow(window)
+        , mCamera(nullptr)
+        , mInitialPivotDistance(0)
+        , mMouseWheelMultiplier(0)
+        , mMinimumPivotDistance(0)
+        , mLastAction(ACTION_NONE)
+        , mEnabled(false)
+    {
+    }
+    void setWindow(GLFWwindow *window) { mWindow = window; }
+    void setCamera(Camera *camera) { mCamera = camera; }
+    void setEnabled(bool enable) { mEnabled = enable; }
+
+    void cursorPositionCallback(GLFWwindow *window, double xpos, double ypos);
+    void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
+    void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
 private:
     enum { ACTION_NONE, ACTION_ZOOM, ACTION_PAN, ACTION_TUMBLE };
 
     ivec2 getWindowSize() const
     {
+        if (!mWindow)
+            return {};
         int w, h;
         glfwGetWindowSize(mWindow, &w, &h);
         return { w, h };
     }
 
     vec2 mInitialMousePos;
-    CameraState mInitialCam;
-    CameraState *mCamera;
+    Camera mInitialCam;
+    Camera *mCamera;
     float mInitialPivotDistance;
     float mMouseWheelMultiplier, mMinimumPivotDistance;
     int mLastAction;
 
-    ivec2 mWindowSize; // used when mWindow is null
     GLFWwindow *mWindow;
     bool mEnabled;
-    int mSignalPriority;
 };
 
-void CameraController::mouseDrag(const vec2 &mousePos, bool leftDown, bool middleDown, bool rightDown)
+void CameraUI::cursorPositionCallback(GLFWwindow *window, double xpos, double ypos)
 {
     if (!mCamera || !mEnabled)
         return;
 
+    const auto mousePos = glm::vec2(xpos, ypos);
+
+    const bool leftDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const bool middleDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+    const bool rightDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    const bool altPressed = glfwGetKey(window, GLFW_KEY_LEFT_ALT);
+    const bool ctrlPressed = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL);
+
     int action;
-    if (rightDown || (leftDown && middleDown))
+    if (rightDown || (leftDown && middleDown) || (leftDown && ctrlPressed))
         action = ACTION_ZOOM;
-    else if (middleDown)
+    else if (middleDown || (leftDown && altPressed))
         action = ACTION_PAN;
     else if (leftDown)
         action = ACTION_TUMBLE;
@@ -393,88 +431,106 @@ void CameraController::mouseDrag(const vec2 &mousePos, bool leftDown, bool middl
 
     mLastAction = action;
 
-    const auto up = vec3(0, 1, 0);
+    const auto initial_forward = mInitialCam.getForwardVector();
+    const auto world_up = vec3(0, 1, 0);
+    const auto window_size = getWindowSize();
 
     if (action == ACTION_ZOOM) { // zooming
         auto mouseDelta = (mousePos.x - mInitialMousePos.x) + (mousePos.y - mInitialMousePos.y);
 
-        float newPivotDistance = powf(2.71828183f, 2 * -mouseDelta / length(vec2(getWindowSize()))) *
-                                 mInitialPivotDistance;
-        vec3 oldTarget = mInitialCam.eye_pos + mInitialCam.eye_dir * mInitialPivotDistance;
-        vec3 newEye = oldTarget - mInitialCam.eye_dir * newPivotDistance;
+        float newPivotDistance =
+            powf(2.71828183f, 2 * -mouseDelta / length(vec2(window_size))) * mInitialPivotDistance;
+        vec3 oldTarget = mInitialCam.eye_pos + initial_forward * mInitialPivotDistance;
+        vec3 newEye = oldTarget - initial_forward * newPivotDistance;
         mCamera->eye_pos = newEye;
         mCamera->pivot_distance = std::max<float>(newPivotDistance, mMinimumPivotDistance);
 
     } else if (action == ACTION_PAN) { // panning
-        float deltaX =
-            (mousePos.x - mInitialMousePos.x) / (float)getWindowSize().x * mInitialPivotDistance;
-        float deltaY =
-            (mousePos.y - mInitialMousePos.y) / (float)getWindowSize().y * mInitialPivotDistance;
-        const auto right = glm::cross(mInitialCam.eye_dir, up);
-        mCamera->eye_pos = mInitialCam.eye_pos - right * deltaX + up * deltaY;
+        float deltaX = (mousePos.x - mInitialMousePos.x) / float(window_size.x) * mInitialPivotDistance;
+        float deltaY = (mousePos.y - mInitialMousePos.y) / float(window_size.y) * mInitialPivotDistance;
+        const auto right = glm::cross(initial_forward, world_up);
+        mCamera->eye_pos = mInitialCam.eye_pos - right * deltaX + world_up * deltaY;
 
     } else { // tumbling
         float deltaX = (mousePos.x - mInitialMousePos.x) / -100.0f;
         float deltaY = (mousePos.y - mInitialMousePos.y) / 100.0f;
-        vec3 mW = normalize(mInitialCam.eye_dir);
-        bool invertMotion = false;
-        // bool invertMotion = (mInitialCam.getOrientation() * mInitialCam.getWorldUp()).y < 0.0f;
+        vec3 mW = normalize(initial_forward);
 
-        vec3 mU = normalize(cross(up, mW));
+        vec3 mU = normalize(cross(world_up, mW));
 
+        const bool invertMotion = (mInitialCam.orientation * world_up).y < 0.0f;
         if (invertMotion) {
             deltaX = -deltaX;
             deltaY = -deltaY;
         }
 
-        glm::vec3 rotatedVec =
-            glm::angleAxis(deltaY, mU) * (-mInitialCam.eye_dir * mInitialPivotDistance);
-        rotatedVec = glm::angleAxis(deltaX, up) * rotatedVec;
+        glm::vec3 rotatedVec = glm::angleAxis(deltaY, mU) * (-initial_forward * mInitialPivotDistance);
+        rotatedVec = glm::angleAxis(deltaX, world_up) * rotatedVec;
 
-        mCamera->eye_pos =
-            mInitialCam.eye_pos + mInitialCam.eye_dir * mInitialPivotDistance + rotatedVec;
-        mCamera->setOrientation(
-            glm::angleAxis(deltaX, mInitialCam.getWorldUp()) * glm::angleAxis(deltaY, mU) *
-            mInitialCam.getOrientation());
+        mCamera->eye_pos = mInitialCam.eye_pos + initial_forward * mInitialPivotDistance + rotatedVec;
+        mCamera->orientation =
+            glm::angleAxis(deltaX, world_up) * glm::angleAxis(deltaY, mU) * mInitialCam.orientation;
     }
 }
-static CameraUIState g_camera;
 
-// === GLFW input callbacks ===
-
-static void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {}
-
-static void cursorPositionCallback(GLFWwindow *window, double xpos, double ypos)
+void CameraUI::mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
 {
-    bool left_btn_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    bool mid_btn_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
-    bool right_btn_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-    bool alt_pressed = glfwGetKey(window, GLFW_KEY_LEFT_ALT);
-    bool ctrl_pressed = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL);
-    mid_btn_down |= alt_pressed;
-    right_btn_down |= ctrl_pressed;
-    g_camera.mouseMove({ xpos, ypos }, left_btn_down, mid_btn_down, right_btn_down);
-}
+    if (!mCamera || !mEnabled)
+        return;
 
-static void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
-{
     if (action == GLFW_PRESS) {
         double x, y;
         glfwGetCursorPos(window, &x, &y);
-        g_camera.mouseDown({ x, y });
+        mInitialMousePos = glm::vec2(x, y);
+        mInitialCam = *mCamera;
+        mInitialPivotDistance = mCamera->pivot_distance;
+        mLastAction = ACTION_NONE;
 
     } else if (action == GLFW_RELEASE) {
-        g_camera.mouseUp();
+        mLastAction = ACTION_NONE;
     }
 }
 
-static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset) {}
+void CameraUI::scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    if (!mCamera || !mEnabled)
+        return;
+
+    // some mice issue mouseWheel events during middle-clicks; filter that out
+    if (mLastAction != ACTION_NONE)
+        return;
+
+    const auto increment = float(yoffset);
+
+    float multiplier;
+    if (mMouseWheelMultiplier > 0)
+        multiplier = powf(mMouseWheelMultiplier, increment);
+    else
+        multiplier = powf(-mMouseWheelMultiplier, -increment);
+    const auto eye_dir = mCamera->getForwardVector();
+    vec3 newEye = mCamera->eye_pos + eye_dir * (mCamera->pivot_distance * (1 - multiplier));
+    mCamera->eye_pos = newEye;
+    mCamera->pivot_distance =
+        std::max<float>(mCamera->pivot_distance * multiplier, mMinimumPivotDistance);
+}
+
+// === Global State ===
+
+static Framebuffer g_framebuffer;
+static Camera g_camera;
+static CameraUI g_camera_ui;
+
+// === GLFW input callbacks ===
 
 int main()
 {
     g_logger = spdlog::stderr_logger_mt("fluid");
+    g_logger->set_level(spdlog::level::debug);
 
-    glfwSetErrorCallback(errorCallback);
+    glfwSetErrorCallback([](int error, const char *description) {
+        g_logger->error("GLFW Error {}: {}", error, description);
+    });
+
 
     // Init GLFW and create a window.
 
@@ -496,15 +552,6 @@ int main()
     }
     const auto destroy_window = finally([&window]() { glfwDestroyWindow(window); });
 
-    // Resize callback.
-    glfwSetFramebufferSizeCallback(window, framebufferResizedCallback);
-
-    // Input callbacks.
-    glfwSetKeyCallback(window, keyCallback);
-    glfwSetCursorPosCallback(window, cursorPositionCallback);
-    glfwSetMouseButtonCallback(window, mouseButtonCallback);
-    glfwSetScrollCallback(window, scrollCallback);
-
     // Set up OpenGL context.
     {
         glfwMakeContextCurrent(window);
@@ -525,9 +572,11 @@ int main()
 
     // Enable vsync.
     glfwSwapInterval(1);
+    GL_CHECK();
 
     // Setup reverse-Z.
     glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    GL_CHECK();
     glClearDepth(0.0);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_GREATER);
@@ -543,6 +592,7 @@ int main()
     // Setup common uniform buffers.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
+    GL_CHECK();
 
     // Setup the octree renderer program.
     GLProgram octree_renderer_program;
@@ -553,7 +603,9 @@ int main()
         octree_renderer_program = createAndLinkProgram(shaders);
 
         auto common_ubo_index = glGetUniformBlockIndex(octree_renderer_program, "CommonUniforms");
-        glUniformBlockBinding(octree_renderer_program, common_ubo_index, common_ubo_bind_point);
+        if (common_ubo_index != GL_INVALID_INDEX)
+            glUniformBlockBinding(octree_renderer_program, common_ubo_index, common_ubo_bind_point);
+        GL_CHECK();
     }
 
     // Setup the simple program.
@@ -563,9 +615,12 @@ int main()
         shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, simple_vs_code.c_str()));
         shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, simple_fs_code.c_str()));
         simple_program = createAndLinkProgram(shaders);
+        GL_CHECK();
 
         auto common_ubo_index = glGetUniformBlockIndex(simple_program, "CommonUniforms");
-        glUniformBlockBinding(simple_program, common_ubo_index, common_ubo_bind_point);
+        if (common_ubo_index != GL_INVALID_INDEX)
+            glUniformBlockBinding(simple_program, common_ubo_index, common_ubo_bind_point);
+        GL_CHECK();
     }
 
     // Setup quad vertex data for the octree renderer program.
@@ -586,35 +641,60 @@ int main()
     // Setup cube vertex data for the simple program.
     auto cube_vao = createCubeVAO();
     {
-        // glBindVertexArray(cube_vao);
+        glBindVertexArray(cube_vao);
         const auto vpos_location = glGetAttribLocation(simple_program, "pos");
         glEnableVertexAttribArray(vpos_location);
         glVertexAttribPointer(vpos_location, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void *)0);
-        // glBindVertexArray(0);
+        glBindVertexArray(0);
         GL_CHECK();
     }
 
     // Init framebuffer.
     {
         int width, height;
-        glfwGetWindowSize(window, &width, &height);
-        framebufferResizedCallback(window, width, height);
+        glfwGetFramebufferSize(window, &width, &height);
+        glViewport(0, 0, width, height);
+        g_framebuffer.init(width, height);
     }
 
+    // Init camera.
+    g_camera.eye_pos = glm::vec3(0, 0, 2);
+    g_camera_ui.setWindow(window);
+    g_camera_ui.setCamera(&g_camera);
+    g_camera_ui.setEnabled(true);
+
+    // Event callbacks.
+    glfwSetFramebufferSizeCallback(window, [](GLFWwindow *, int width, int height) {
+        glViewport(0, 0, width, height);
+        g_framebuffer.init(width, height);
+    });
+
+    glfwSetKeyCallback(window, [](GLFWwindow *, int key, int scancode, int action, int mods) {});
+    glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) {
+        g_camera_ui.cursorPositionCallback(window, xpos, ypos);
+    });
+    glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) {
+        g_camera_ui.mouseButtonCallback(window, button, action, mods);
+    });
+    glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
+        g_camera_ui.scrollCallback(window, xoffset, yoffset);
+    });
+
+    // Main loop.
     glm::mat4 model;
-    float time_prev_start = glfwGetTime() - 1.f / 60.f;
+    float time_prev_start = float(glfwGetTime()) - 1.f / 60.f;
     while (!glfwWindowShouldClose(window)) {
-        const float time_start = glfwGetTime();
+        const float time_start = float(glfwGetTime());
         const float time_delta = time_start - time_prev_start;
         time_prev_start = time_start;
 
-        const int width = g_fbstate.width;
-        const int height = g_fbstate.height;
+        const int width = g_framebuffer.width;
+        const int height = g_framebuffer.height;
         const float aspect_ratio = width / (float)height;
 
         // Draw
         {
-            glBindFramebuffer(GL_FRAMEBUFFER, g_fbstate.fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, g_framebuffer.fbo);
             const auto unbind_fbo = finally([]() { glBindFramebuffer(GL_FRAMEBUFFER, 0); });
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -622,10 +702,12 @@ int main()
             // Fill and bind common uniforms.
             {
                 CommonUniforms uniforms;
-                uniforms.eye_pos = { 0.0, 0.0, -3.0f };
-                uniforms.eye_dir = { 0.0, 0.0, 1.0f };
-                const auto view = glm::lookAt(
-                    uniforms.eye_pos, uniforms.eye_pos + uniforms.eye_dir, glm::vec3(0, 1, 0));
+                uniforms.eye_pos = g_camera.eye_pos;
+                uniforms.eye_dir = g_camera.getForwardVector();
+                // const auto view = glm::lookAt(
+                //    uniforms.eye_pos, uniforms.eye_pos + uniforms.eye_dir, glm::vec3(0, 1, 0));
+                const auto view =
+                    glm::translate(glm::toMat4(glm::inverse(g_camera.orientation)), -uniforms.eye_pos);
                 const auto proj = perspectiveInvZ(cam_fov, aspect_ratio, cam_near);
                 // model = glm::rotate(glm::mat4(), float(glfwGetTime()), glm::vec3());
                 model = glm::rotate(model, glm::radians(60.0f) * time_delta, glm::vec3(1, 1, 1));
@@ -661,11 +743,11 @@ int main()
 
         // Copy from framebuffer to window.
         {
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, g_fbstate.fbo);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, g_framebuffer.fbo);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // default FBO
             glBlitFramebuffer(
-                0, 0, g_fbstate.width, g_fbstate.height, 0, 0, width, height, GL_COLOR_BUFFER_BIT,
-                GL_LINEAR);
+                0, 0, g_framebuffer.width, g_framebuffer.height, 0, 0, width, height,
+                GL_COLOR_BUFFER_BIT, GL_LINEAR);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 

@@ -35,18 +35,26 @@ add_library(remotery STATIC external/remotery/lib/Remotery.c)
 target_include_directories(remotery PUBLIC external/remotery/lib)
 target_compile_definitions(remotery PUBLIC RMT_USE_OPENGL)
 
+# variant
+# link against: variant
+add_library(variant INTERFACE)
+target_include_directories(variant INTERFACE
+    ${PROJECT_SOURCE_DIR}/external/variant/include/mpark)
+
+# OpenGL
 find_package(OpenGL REQUIRED)
 
 # Main executable.
+set(LIBS variant imgui remotery glfw ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
 file(GLOB SRC *.cpp)
 add_executable(fluid ${SRC})
 target_link_libraries(fluid
-    ${CONAN_TARGETS} imgui remotery glfw ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
+    ${CONAN_TARGETS} ${LIBS})
 
 # Unit tests.
 file(GLOB TEST_SRC test/*.cpp)
 add_executable(unittest ${TEST_SRC})
-target_link_libraries(unittest ${CONAN_TARGETS})
+target_link_libraries(unittest ${CONAN_TARGETS} ${LIBS})
 include(GoogleTest)
 gtest_add_tests(TARGET unittest)
 enable_testing()

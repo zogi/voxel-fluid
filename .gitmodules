@@ -7,3 +7,6 @@
 [submodule "external/remotery"]
 	path = external/remotery
 	url = https://github.com/Celtoys/Remotery.git
+[submodule "external/variant"]
+	path = external/variant
+	url = https://github.com/mpark/variant.git

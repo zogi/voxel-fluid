@@ -1,8 +1,8 @@
 from conans import ConanFile, CMake
 
 
-class VulkanPlaygroundConan(ConanFile):
-    name = "VulkanPlayground"
+class FluidConan(ConanFile):
+    name = "Fluid"
     version = "0.1"
     settings = "os", "compiler", "build_type", "arch"
     options = {}
