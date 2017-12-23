@@ -239,7 +239,11 @@ static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
         uv = 0.5f * pos + 0.5f;
     }
     )glsl";
+struct OctreeRendererTextures {
+    GLuint depth;
+};
 static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
+    uniform sampler2D depth;
     uniform sampler3D octree_bricks;
     readonly buffer octree_nodes {
         uint array[];
@@ -247,6 +251,9 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
 
     in vec2 uv;
     void main() {
+        float depth = texture(depth, uv).x;
+        if (depth != 0.0)
+            discard;
         // TODO: transform back stuff to view space
         // Now eye is at the origin and looking towards -z.
         gl_FragColor = vec4(uv.x, uv.y, 0.0, 1.0);
@@ -362,9 +369,9 @@ public:
     CameraUI(GLFWwindow *window = nullptr)
         : mWindow(window)
         , mCamera(nullptr)
-        , mInitialPivotDistance(0)
-        , mMouseWheelMultiplier(0)
-        , mMinimumPivotDistance(0)
+        , mInitialPivotDistance(1)
+        , mMouseWheelMultiplier(1.1f)
+        , mMinimumPivotDistance(0.01f)
         , mLastAction(ACTION_NONE)
         , mEnabled(false)
     {
@@ -579,7 +586,7 @@ int main()
     GL_CHECK();
     glClearDepth(0.0);
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_GREATER);
+    glDepthFunc(GL_GEQUAL);
     const auto perspectiveInvZ = [](float fov_y, float aspect_ratio, float z_near) {
         float f = 1.0f / tan(fov_y / 2.0f);
         return glm::mat4(
@@ -595,16 +602,23 @@ int main()
     GL_CHECK();
 
     // Setup the octree renderer program.
-    GLProgram octree_renderer_program;
+    GLProgram otr_program;
+    const GLuint otr_depth_texture_unit = 1;
+    GLuint otr_depth_uniform_loc = UINT_MAX; // will be set below.
     {
         std::vector<GLShader> shaders;
         shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, octree_renderer_vs_code.c_str()));
         shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, octree_renderer_fs_code.c_str()));
-        octree_renderer_program = createAndLinkProgram(shaders);
+        otr_program = createAndLinkProgram(shaders);
 
-        auto common_ubo_index = glGetUniformBlockIndex(octree_renderer_program, "CommonUniforms");
+        // Common uniforms.
+        const auto common_ubo_index = glGetUniformBlockIndex(otr_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(octree_renderer_program, common_ubo_index, common_ubo_bind_point);
+            glUniformBlockBinding(otr_program, common_ubo_index, common_ubo_bind_point);
+        GL_CHECK();
+
+        // Get depth sampler uniform locaction.
+        otr_depth_uniform_loc = glGetUniformLocation(otr_program, "depth");
         GL_CHECK();
     }
 
@@ -617,6 +631,7 @@ int main()
         simple_program = createAndLinkProgram(shaders);
         GL_CHECK();
 
+        // Common uniforms.
         auto common_ubo_index = glGetUniformBlockIndex(simple_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
             glUniformBlockBinding(simple_program, common_ubo_index, common_ubo_bind_point);
@@ -631,7 +646,7 @@ int main()
         glGenBuffers(1, &quad_vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, quad_vertex_buffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        const auto vpos_location = glGetAttribLocation(octree_renderer_program, "pos");
+        const auto vpos_location = glGetAttribLocation(otr_program, "pos");
         glEnableVertexAttribArray(vpos_location);
         glVertexAttribPointer(vpos_location, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), (void *)0);
         glBindVertexArray(0);
@@ -669,7 +684,10 @@ int main()
         g_framebuffer.init(width, height);
     });
 
-    glfwSetKeyCallback(window, [](GLFWwindow *, int key, int scancode, int action, int mods) {});
+    glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode, int action, int mods) {
+        if (key == GLFW_KEY_ESCAPE)
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+    });
     glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) {
         g_camera_ui.cursorPositionCallback(window, xpos, ypos);
     });
@@ -721,23 +739,36 @@ int main()
                 glBindBufferBase(GL_UNIFORM_BUFFER, common_ubo_bind_point, common_ubo);
             }
 
-            // Draw quad.
-            //{
-            //    glUseProgram(octree_renderer_program);
-            //    glBindVertexArray(quad_vao);
-            //    // glDrawArrays(GL_TRIANGLES, 0, 6);
-            //}
-
             // Draw cube.
-            {
-                glUseProgram(simple_program);
-                GL_CHECK();
-                glBindVertexArray(cube_vao);
-                GL_CHECK();
-                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, nullptr);
-                GL_CHECK();
-            }
+            glUseProgram(simple_program);
+            glBindVertexArray(cube_vao);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, nullptr);
+            GL_CHECK();
 
+            // Disable and detach z buffer.
+            glDisable(GL_DEPTH_TEST);
+            glDepthMask(GL_FALSE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+            GL_CHECK();
+
+            // Bind depth texture.
+            glBindTextureUnit(otr_depth_texture_unit, g_framebuffer.depth_texture);
+
+            // Draw quad.
+            glUseProgram(otr_program);
+            glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
+            glBindVertexArray(quad_vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            GL_CHECK();
+
+            // Unbind depth texture.
+            glBindTextureUnit(otr_depth_texture_unit, 0);
+
+            // Re-enable and re-attach z buffer.
+            glEnable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, g_framebuffer.depth_texture, 0);
             GL_CHECK();
         }
 
