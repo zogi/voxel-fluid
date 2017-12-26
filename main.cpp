@@ -596,6 +596,11 @@ int main()
     const auto cam_fov = glm::radians(100.0f);
     const auto cam_near = 0.01f;
 
+    // Backface culling.
+    glEnable(GL_CULL_FACE);
+    glFrontFace(GL_CCW);
+    glCullFace(GL_BACK);
+
     // Setup common uniform buffers.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
