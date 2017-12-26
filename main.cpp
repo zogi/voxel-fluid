@@ -277,13 +277,13 @@ static std::string simple_fs_code = common_shader_code + R"glsl(
 
 // === Quad vertices ===
 
-static const glm::vec2 vertices[6] = { { -1.0f, -1.0f }, { -1.0f, 1.0f }, { 1.0f, 1.0f },
-                                       { 1.0f, 1.0f },   { 1.0f, -1.0f }, { -1.0f, -1.0f } };
+static const glm::vec2 vertices[6] = { { -1.0f, -1.0f }, { 1.0f, 1.0f },   { -1.0f, 1.0f },
+                                       { 1.0f, 1.0f },   { -1.0f, -1.0f }, { 1.0f, -1.0f } };
 
 // === Cube VAO ===
 
-static const uint16_t cube_indices[] = { 0, 2, 4, 4, 2, 6, 1, 5, 3, 3, 5, 7, 0, 1, 2, 2, 1, 3,
-                                         4, 6, 5, 5, 6, 7, 0, 4, 1, 1, 4, 5, 2, 3, 6, 6, 3, 7 };
+static const uint16_t cube_indices[] = { 4, 2, 0, 6, 2, 4, 3, 5, 1, 7, 5, 3, 2, 1, 0, 3, 1, 2,
+                                         5, 6, 4, 7, 6, 5, 1, 4, 0, 5, 4, 1, 6, 3, 2, 7, 3, 6 };
 static GLVAO createCubeVAO()
 {
     GLVAO cube_vao = GLVAO::create();
