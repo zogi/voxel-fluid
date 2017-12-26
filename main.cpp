@@ -349,6 +349,9 @@ void Framebuffer::init(int width, int height)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+// === Time delta ===
+static float g_time_delta = 0;
+
 // === Camera ===
 
 struct Camera {
@@ -383,6 +386,8 @@ public:
     void cursorPositionCallback(GLFWwindow *window, double xpos, double ypos);
     void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
     void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
+
+    void tick();
 
 private:
     enum { ACTION_NONE, ACTION_ZOOM, ACTION_PAN, ACTION_TUMBLE };
@@ -519,6 +524,32 @@ void CameraUI::scrollCallback(GLFWwindow *window, double xoffset, double yoffset
     mCamera->eye_pos = newEye;
     mCamera->pivot_distance =
         std::max<float>(mCamera->pivot_distance * multiplier, mMinimumPivotDistance);
+}
+
+void CameraUI::tick()
+{
+    if (!mEnabled || !mCamera || !mWindow)
+        return;
+
+    constexpr float CAMERA_SPEED = 2.0f; // units per second
+    const auto forward_vector = mCamera->getForwardVector();
+    const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
+
+    const bool forward_down = glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS;
+    if (forward_down)
+        mCamera->eye_pos += g_time_delta * CAMERA_SPEED * forward_vector;
+
+    const bool backward_down = glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS;
+    if (backward_down)
+        mCamera->eye_pos -= g_time_delta * CAMERA_SPEED * forward_vector;
+
+    const bool left_down = glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS;
+    if (left_down)
+        mCamera->eye_pos -= g_time_delta * CAMERA_SPEED * right_vector;
+
+    const bool right_down = glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS;
+    if (right_down)
+        mCamera->eye_pos += g_time_delta * CAMERA_SPEED * right_vector;
 }
 
 // === Global State ===
@@ -708,12 +739,17 @@ int main()
     float time_prev_start = float(glfwGetTime()) - 1.f / 60.f;
     while (!glfwWindowShouldClose(window)) {
         const float time_start = float(glfwGetTime());
-        const float time_delta = time_start - time_prev_start;
+        g_time_delta = time_start - time_prev_start;
         time_prev_start = time_start;
 
         const int width = g_framebuffer.width;
         const int height = g_framebuffer.height;
         const float aspect_ratio = width / (float)height;
+
+        // Tick
+        {
+            g_camera_ui.tick();
+        }
 
         // Draw
         {
@@ -733,7 +769,7 @@ int main()
                     glm::translate(glm::toMat4(glm::inverse(g_camera.orientation)), -uniforms.eye_pos);
                 const auto proj = perspectiveInvZ(cam_fov, aspect_ratio, cam_near);
                 // model = glm::rotate(glm::mat4(), float(glfwGetTime()), glm::vec3());
-                model = glm::rotate(model, glm::radians(60.0f) * time_delta, glm::vec3(1, 1, 1));
+                model = glm::rotate(model, glm::radians(60.0f) * g_time_delta, glm::vec3(1, 1, 1));
                 uniforms.mvp = proj * view * model;
                 // glm::mat4 m, p, mvp;
                 // m = glm::rotate(glm::mat4(), (float)glfwGetTime(), glm::vec3(0.0, 0.0, 1.0));
