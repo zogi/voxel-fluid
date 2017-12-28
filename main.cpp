@@ -328,7 +328,7 @@ void Framebuffer::init(int width, int height)
     this->width = width;
     this->height = height;
 
-    // Setup fbo with floating-point depth.
+    // Set up fbo with floating-point depth.
 
     color_texture = GLTexture::create();
     glBindTexture(GL_TEXTURE_2D, color_texture);
@@ -564,22 +564,21 @@ static CameraUI g_camera_ui;
 
 int main()
 {
+    // Set up logging.
     g_logger = spdlog::stderr_logger_mt("fluid");
     g_logger->set_level(spdlog::level::debug);
-
     glfwSetErrorCallback([](int error, const char *description) {
         g_logger->error("GLFW Error {}: {}", error, description);
     });
 
-
-    // Init GLFW and create a window.
-
+    // Initialize GLFW.
     if (!glfwInit()) {
         g_logger->critical("Failed to initialize GLFT.");
         abort();
     }
     const auto terminate_glfw = finally([]() { glfwTerminate(); });
 
+    // Create window.
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -614,7 +613,7 @@ int main()
     glfwSwapInterval(1);
     GL_CHECK();
 
-    // Setup reverse-Z.
+    // Set up reverse-Z.
     glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     GL_CHECK();
     glClearDepth(0.0);
@@ -629,17 +628,17 @@ int main()
     const auto cam_fov = glm::radians(100.0f);
     const auto cam_near = 0.01f;
 
-    // Backface culling.
+    // Set up backface culling.
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
 
-    // Setup common uniform buffers.
+    // Set up common uniform buffers.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
     GL_CHECK();
 
-    // Setup the octree renderer program.
+    // Set up the octree renderer program.
     GLProgram otr_program;
     const GLuint otr_depth_texture_unit = 1;
     GLuint otr_depth_uniform_loc = UINT_MAX; // will be set below.
@@ -660,7 +659,7 @@ int main()
         GL_CHECK();
     }
 
-    // Setup the simple program.
+    // Set up the simple program.
     GLProgram simple_program;
     {
         std::vector<GLShader> shaders;
@@ -676,7 +675,7 @@ int main()
         GL_CHECK();
     }
 
-    // Setup quad vertex data for the octree renderer program.
+    // Set up quad vertex data for the octree renderer program.
     auto quad_vao = GLVAO::create();
     {
         glBindVertexArray(quad_vao);
@@ -691,7 +690,7 @@ int main()
         GL_CHECK();
     }
 
-    // Setup cube vertex data for the simple program.
+    // Set up cube vertex data for the simple program.
     auto cube_vao = createCubeVAO();
     {
         glBindVertexArray(cube_vao);
