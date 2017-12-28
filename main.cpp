@@ -764,18 +764,12 @@ int main()
                 CommonUniforms uniforms;
                 uniforms.eye_pos = g_camera.eye_pos;
                 uniforms.eye_dir = g_camera.getForwardVector();
-                // const auto view = glm::lookAt(
-                //    uniforms.eye_pos, uniforms.eye_pos + uniforms.eye_dir, glm::vec3(0, 1, 0));
                 const auto view =
                     glm::translate(glm::toMat4(glm::inverse(g_camera.orientation)), -uniforms.eye_pos);
                 const auto proj = perspectiveInvZ(cam_fov, aspect_ratio, cam_near);
-                // model = glm::rotate(glm::mat4(), float(glfwGetTime()), glm::vec3());
                 model = glm::rotate(model, glm::radians(60.0f) * g_time_delta, glm::vec3(1, 1, 1));
                 uniforms.mvp = proj * view * model;
-                // glm::mat4 m, p, mvp;
-                // m = glm::rotate(glm::mat4(), (float)glfwGetTime(), glm::vec3(0.0, 0.0, 1.0));
-                // p = glm::ortho(-aspect_ratio, aspect_ratio, -1.f, 1.f, 1.f, -1.f);
-                // mvp = p * m;
+
                 glBindBuffer(GL_UNIFORM_BUFFER, common_ubo);
                 glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), &uniforms, GL_STATIC_DRAW);
                 glBindBufferBase(GL_UNIFORM_BUFFER, common_ubo_bind_point, common_ubo);
