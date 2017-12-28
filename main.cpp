@@ -424,8 +424,8 @@ void CameraUI::cursorPositionCallback(GLFWwindow *window, double xpos, double yp
     const bool leftDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     const bool middleDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
     const bool rightDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-    const bool altPressed = glfwGetKey(window, GLFW_KEY_LEFT_ALT);
-    const bool ctrlPressed = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL);
+    const bool altPressed = glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS;
+    const bool ctrlPressed = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
 
     int action;
     if (rightDown || (leftDown && middleDown) || (leftDown && ctrlPressed))
