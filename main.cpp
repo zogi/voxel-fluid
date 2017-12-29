@@ -227,7 +227,7 @@ struct CommonUniforms {
 
 static std::string common_shader_code = R"glsl(
     #version 430
-    layout(shared) uniform CommonUniforms {
+    layout(std140) uniform CommonUniforms {
         vec3 eye_pos;
         vec3 eye_dir;
         mat4 mvp;
