@@ -537,21 +537,26 @@ void CameraUI::tick()
     const auto forward_vector = mCamera->getForwardVector();
     const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
 
+    glm::vec3 pos_delta;
+
     const bool forward_down = glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS;
     if (forward_down)
-        mCamera->eye_pos += g_time_delta * CAMERA_SPEED * forward_vector;
+        pos_delta += g_time_delta * CAMERA_SPEED * forward_vector;
 
     const bool backward_down = glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS;
     if (backward_down)
-        mCamera->eye_pos -= g_time_delta * CAMERA_SPEED * forward_vector;
+        pos_delta -= g_time_delta * CAMERA_SPEED * forward_vector;
 
     const bool left_down = glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS;
     if (left_down)
-        mCamera->eye_pos -= g_time_delta * CAMERA_SPEED * right_vector;
+        pos_delta -= g_time_delta * CAMERA_SPEED * right_vector;
 
     const bool right_down = glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS;
     if (right_down)
-        mCamera->eye_pos += g_time_delta * CAMERA_SPEED * right_vector;
+        pos_delta += g_time_delta * CAMERA_SPEED * right_vector;
+
+    mCamera->eye_pos += pos_delta;
+    mInitialCam.eye_pos += pos_delta;
 }
 
 // === Global State ===
