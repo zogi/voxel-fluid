@@ -1,3 +1,6 @@
+#include <imgui.h>
+#include "imgui_impl_glfw_gl3.h"
+
 // spdlog includes windows.h on Windows, which should be included before glfw.
 #include <spdlog/spdlog.h>
 
@@ -419,11 +422,12 @@ public:
     void setCamera(Camera *camera) { mCamera = camera; }
     void setEnabled(bool enable) { mEnabled = enable; }
 
+    void tick(); // Called once each frame.
+
+    void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
     void cursorPositionCallback(GLFWwindow *window, double xpos, double ypos);
     void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods);
     void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
-
-    void tick();
 
 private:
     enum { ACTION_NONE, ACTION_ZOOM, ACTION_PAN, ACTION_TUMBLE };
@@ -443,10 +447,50 @@ private:
     float mInitialPivotDistance;
     float mMouseWheelMultiplier, mMinimumPivotDistance;
     int mLastAction;
+    std::array<bool, 4> mMotionKeyState;
 
     GLFWwindow *mWindow;
     bool mEnabled;
 };
+
+void CameraUI::tick()
+{
+    if (!mEnabled || !mCamera || !mWindow)
+        return;
+
+    constexpr float CAMERA_SPEED = 2.0f; // units per second
+    const auto forward_vector = mCamera->getForwardVector();
+    const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
+
+    glm::vec3 pos_delta;
+
+    if (mMotionKeyState[0])
+        pos_delta += forward_vector;
+    if (mMotionKeyState[1])
+        pos_delta -= forward_vector;
+    if (mMotionKeyState[2])
+        pos_delta -= right_vector;
+    if (mMotionKeyState[3])
+        pos_delta += right_vector;
+
+    pos_delta *= g_time_delta * CAMERA_SPEED;
+    mCamera->eye_pos += pos_delta;
+    mInitialCam.eye_pos += pos_delta;
+}
+
+void CameraUI::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    const bool pressed = action == GLFW_PRESS;
+    if (key == GLFW_KEY_W) {
+        mMotionKeyState[0] = pressed;
+    } else if (key == GLFW_KEY_S) {
+        mMotionKeyState[1] = pressed;
+    } else if (key == GLFW_KEY_A) {
+        mMotionKeyState[2] = pressed;
+    } else if (key == GLFW_KEY_D) {
+        mMotionKeyState[3] = pressed;
+    }
+}
 
 void CameraUI::cursorPositionCallback(GLFWwindow *window, double xpos, double ypos)
 {
@@ -560,37 +604,6 @@ void CameraUI::scrollCallback(GLFWwindow *window, double xoffset, double yoffset
     mCamera->eye_pos = newEye;
     mCamera->pivot_distance =
         std::max<float>(mCamera->pivot_distance * multiplier, mMinimumPivotDistance);
-}
-
-void CameraUI::tick()
-{
-    if (!mEnabled || !mCamera || !mWindow)
-        return;
-
-    constexpr float CAMERA_SPEED = 2.0f; // units per second
-    const auto forward_vector = mCamera->getForwardVector();
-    const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
-
-    glm::vec3 pos_delta;
-
-    const bool forward_down = glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS;
-    if (forward_down)
-        pos_delta += g_time_delta * CAMERA_SPEED * forward_vector;
-
-    const bool backward_down = glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS;
-    if (backward_down)
-        pos_delta -= g_time_delta * CAMERA_SPEED * forward_vector;
-
-    const bool left_down = glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS;
-    if (left_down)
-        pos_delta -= g_time_delta * CAMERA_SPEED * right_vector;
-
-    const bool right_down = glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS;
-    if (right_down)
-        pos_delta += g_time_delta * CAMERA_SPEED * right_vector;
-
-    mCamera->eye_pos += pos_delta;
-    mInitialCam.eye_pos += pos_delta;
 }
 
 // === Global State ===
@@ -758,44 +771,93 @@ int main()
     g_camera_ui.setCamera(&g_camera);
     g_camera_ui.setEnabled(true);
 
+    // Init imgui.
+    ImGui_ImplGlfwGL3_Init(window, false);
+    const auto terminate_imgui = finally([]() { ImGui_ImplGlfwGL3_Shutdown(); });
+    const auto &imgui_io = ImGui::GetIO();
+    ImGui::StyleColorsClassic();
+
     // Event callbacks.
+
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *, int width, int height) {
         glViewport(0, 0, width, height);
         g_framebuffer.init(width, height);
     });
 
     glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode, int action, int mods) {
+        // Imgui.
+        ImGui_ImplGlfwGL3_KeyCallback(window, key, scancode, action, mods);
+        const auto &io = ImGui::GetIO();
+        if (io.WantCaptureKeyboard)
+            return;
+        // Close window on ESC.
         if (key == GLFW_KEY_ESCAPE)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
+        // Camera.
+        g_camera_ui.keyCallback(window, key, scancode, action, mods);
     });
+
+    glfwSetCharCallback(window, [](GLFWwindow *window, unsigned int codepoint) {
+        // Imgui.
+        ImGui_ImplGlfwGL3_CharCallback(window, codepoint);
+    });
+
     glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) {
+        // Imgui.
+        const auto &io = ImGui::GetIO();
+        if (io.WantCaptureMouse)
+            return;
+        // Camera.
         g_camera_ui.cursorPositionCallback(window, xpos, ypos);
     });
+
     glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) {
+        // Imgui.
+        ImGui_ImplGlfwGL3_MouseButtonCallback(window, button, action, mods);
+        const auto &io = ImGui::GetIO();
+        if (io.WantCaptureMouse)
+            return;
+        // Camera.
         g_camera_ui.mouseButtonCallback(window, button, action, mods);
     });
+
     glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
+        // Imgui.
+        ImGui_ImplGlfwGL3_ScrollCallback(window, xoffset, yoffset);
+        const auto &io = ImGui::GetIO();
+        if (io.WantCaptureMouse)
+            return;
+        // Camera.
         g_camera_ui.scrollCallback(window, xoffset, yoffset);
     });
 
+    // Gui state.
+    bool test_window_open = true;
+
     // Main loop.
     glm::mat4 model;
-    float time_prev_start = float(glfwGetTime()) - 1.f / 60.f;
     while (!glfwWindowShouldClose(window)) {
-        const float time_start = float(glfwGetTime());
-        g_time_delta = time_start - time_prev_start;
-        time_prev_start = time_start;
 
-        const int width = g_framebuffer.width;
-        const int height = g_framebuffer.height;
-        const float aspect_ratio = width / (float)height;
+        // Process messages.
+        glfwPollEvents();
 
-        // Tick
+        // Start a new imgui frame.
+        ImGui_ImplGlfwGL3_NewFrame();
+        g_time_delta = imgui_io.DeltaTime;
+
+        // Build GUI.
+        {
+            ImGui::Text("Hello, world!");
+            if (test_window_open)
+                ImGui::ShowTestWindow(&test_window_open);
+        }
+
+        // Update objects.
         {
             g_camera_ui.tick();
         }
 
-        // Draw
+        // Draw.
         {
             glBindFramebuffer(GL_FRAMEBUFFER, g_framebuffer.fbo);
             const auto unbind_fbo = finally([]() { glBindFramebuffer(GL_FRAMEBUFFER, 0); });
@@ -804,6 +866,8 @@ int main()
 
             // Fill and bind common uniforms.
             {
+                const float aspect_ratio = g_framebuffer.width / (float)g_framebuffer.height;
+
                 CommonUniforms uniforms;
                 uniforms.eye_pos = g_camera.eye_pos;
                 uniforms.eye_dir = g_camera.getForwardVector();
@@ -860,23 +924,21 @@ int main()
 
             // Disable blending.
             glDisable(GL_BLEND);
-        }
 
-        // Copy from framebuffer to window.
-        {
+            // Copy framebuffer contents to the display framebuffer (window).
             glBindFramebuffer(GL_READ_FRAMEBUFFER, g_framebuffer.fbo);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // default FBO
             glBlitFramebuffer(
-                0, 0, g_framebuffer.width, g_framebuffer.height, 0, 0, width, height,
-                GL_COLOR_BUFFER_BIT, GL_LINEAR);
+                0, 0, g_framebuffer.width, g_framebuffer.height, 0, 0, g_framebuffer.width,
+                g_framebuffer.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 
+        // Draw GUI.
+        ImGui::Render();
+
         // Present.
         glfwSwapBuffers(window);
-
-        // Process messages.
-        glfwPollEvents();
     }
 
     return 0;
