@@ -624,13 +624,13 @@ int main()
     glClearDepth(0.0);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_GEQUAL);
-    const auto perspectiveInvZ = [](float fov_y, float aspect_ratio, float z_near) {
-        float f = 1.0f / tan(fov_y / 2.0f);
+    const auto perspectiveInvZ = [](float fov_x, float aspect_ratio, float z_near) {
+        float f = 1.0f / tan(fov_x / 2.0f);
         return glm::mat4(
-            f / aspect_ratio, 0.0f, 0.0f, 0.0f, 0.0f, f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            f, 0.0f, 0.0f, 0.0f, 0.0f, f * aspect_ratio, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
             0.0f, z_near, 0.0f);
     };
-    const auto cam_fov = glm::radians(100.0f);
+    const auto cam_fov_x = glm::radians(100.0f);
     const auto cam_near = 0.01f;
 
     // Set up backface culling.
@@ -774,7 +774,7 @@ int main()
                 uniforms.eye_dir = g_camera.getForwardVector();
                 const auto view =
                     glm::translate(glm::toMat4(glm::inverse(g_camera.orientation)), -uniforms.eye_pos);
-                const auto proj = perspectiveInvZ(cam_fov, aspect_ratio, cam_near);
+                const auto proj = perspectiveInvZ(cam_fov_x, aspect_ratio, cam_near);
                 model = glm::rotate(model, glm::radians(60.0f) * g_time_delta, glm::vec3(1, 1, 1));
                 uniforms.mvp = proj * view * model;
 
