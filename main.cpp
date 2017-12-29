@@ -633,6 +633,9 @@ int main()
     glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
 
+    // Other GL state.
+    glEnable(GL_FRAMEBUFFER_SRGB);
+
     // Set up common uniform buffers.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
