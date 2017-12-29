@@ -35,6 +35,7 @@ PenaltyBreakString: 100
 PenaltyExcessCharacter: 5
 PenaltyReturnTypeOnItsOwnLine: 20
 PointerBindsToType: false
+SortIncludes: false
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
