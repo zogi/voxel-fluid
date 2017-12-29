@@ -217,20 +217,26 @@ Finally<Func> finally(const Func &func)
 
 #pragma pack(push, 1)
 struct CommonUniforms {
+    glm::mat4 mvp;
+    glm::mat3x4 eye_orientation; // Such that eye_orientation * (0, 0, -1) = eye_dir
     glm::vec3 eye_pos;
     float _pad1;
     glm::vec3 eye_dir;
     float _pad2;
-    glm::mat4 mvp;
+    glm::vec2 view_size; // 2 * vec2(tan(fov_x/2), tan(fov_y/2))
+    float cam_nearz;
 };
 #pragma pack(pop)
 
 static std::string common_shader_code = R"glsl(
     #version 430
     layout(std140) uniform CommonUniforms {
+        mat4 mvp;
+        mat3 eye_orientation;
         vec3 eye_pos;
         vec3 eye_dir;
-        mat4 mvp;
+        vec2 view_size;
+        float cam_nearz;
     };
 )glsl";
 static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
@@ -241,9 +247,6 @@ static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
         uv = 0.5f * pos + 0.5f;
     }
     )glsl";
-struct OctreeRendererTextures {
-    GLuint depth;
-};
 static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     uniform sampler2D depth;
     uniform sampler3D octree_bricks;
@@ -253,12 +256,43 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
 
     in vec2 uv;
     void main() {
-        float depth = texture(depth, uv).x;
-        if (depth != 0.0)
+        vec3 ray_dir_view = vec3(view_size * (uv - 0.5), -1.0);
+        vec3 ray_dir_world = normalize(eye_orientation * ray_dir_view);
+
+        // Trace a single cube for now.
+        vec3 origin = vec3(0, 0, 0);
+        vec3 size = vec3(1, 1, 1);
+
+        // Compute entry and exit point parameters.
+        vec3 t0 = (origin - eye_pos) / ray_dir_world;
+        vec3 t1 = (origin + size - eye_pos) / ray_dir_world;
+        vec3 tm = min(t0, t1);
+        vec3 tM = max(t0, t1);
+        float t_in =  max(tm.x, max(tm.y, tm.z));
+        float t_out = min(tM.x, min(tM.y, tM.z));
+
+        // Discard if ray misses the octee bounds.
+        if (t_in >= t_out || t_out < 0)
             discard;
-        // TODO: transform back stuff to view space
-        // Now eye is at the origin and looking towards -z.
-        gl_FragColor = vec4(uv.x, uv.y, 0.0, 1.0);
+
+        // Handle camera inside octree bounds.
+        float t_near = cam_nearz / dot(eye_dir, ray_dir_world);
+        if (t_in < 0 && t_out > 0) {
+            t_in = t_near;
+        }
+
+        // Terminate rays using the depth buffer.
+        float depth = texture(depth, uv).x;
+        float t_thresh = t_near / depth;
+        t_in = min(t_in, t_thresh);
+        t_out = min(t_out, t_thresh);
+
+        // Compute transmittance.
+        float optical_depth = t_out - t_in;
+        vec3 extinction = vec3(4, 4, 4);
+        vec3 transmittance = exp(-extinction * optical_depth);
+        // TODO: dither.
+        gl_FragColor = vec4(transmittance, 1.0);
     }
     )glsl";
 
@@ -639,6 +673,7 @@ int main()
     glCullFace(GL_BACK);
 
     // Other GL state.
+    glClearColor(1, 1, 1, 1);
     glEnable(GL_FRAMEBUFFER_SRGB);
 
     // Set up common uniform buffers.
@@ -777,6 +812,10 @@ int main()
                 const auto proj = perspectiveInvZ(cam_fov_x, aspect_ratio, cam_near);
                 model = glm::rotate(model, glm::radians(60.0f) * g_time_delta, glm::vec3(1, 1, 1));
                 uniforms.mvp = proj * view * model;
+                const auto sz_x = 2 * tan(cam_fov_x / 2);
+                uniforms.view_size = glm::vec2(sz_x, sz_x / aspect_ratio);
+                uniforms.eye_orientation = glm::toMat3(g_camera.orientation);
+                uniforms.cam_nearz = cam_near;
 
                 glBindBuffer(GL_UNIFORM_BUFFER, common_ubo);
                 glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), &uniforms, GL_STATIC_DRAW);
@@ -798,6 +837,10 @@ int main()
             // Bind depth texture.
             glBindTextureUnit(otr_depth_texture_unit, g_framebuffer.depth_texture);
 
+            // Set up multiplicative blending.
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+
             // Draw quad.
             glUseProgram(otr_program);
             glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
@@ -814,6 +857,9 @@ int main()
             glFramebufferTexture2D(
                 GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, g_framebuffer.depth_texture, 0);
             GL_CHECK();
+
+            // Disable blending.
+            glDisable(GL_BLEND);
         }
 
         // Copy from framebuffer to window.
