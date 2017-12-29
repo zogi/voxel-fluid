@@ -375,7 +375,7 @@ public:
         : mWindow(window)
         , mCamera(nullptr)
         , mInitialPivotDistance(1)
-        , mMouseWheelMultiplier(1.1f)
+        , mMouseWheelMultiplier(-1.1f)
         , mMinimumPivotDistance(0.01f)
         , mLastAction(ACTION_NONE)
         , mEnabled(false)
