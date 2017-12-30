@@ -398,7 +398,7 @@ struct Camera {
     glm::vec3 eye_pos;
     float pivot_distance;
 
-    Camera() : pivot_distance(1) {}
+    Camera() : pivot_distance(0.01f) {}
     glm::vec3 getForwardVector() const;
 };
 
@@ -411,7 +411,7 @@ public:
     CameraUI(GLFWwindow *window = nullptr)
         : mWindow(window)
         , mCamera(nullptr)
-        , mInitialPivotDistance(1)
+        , mInitialPivotDistance(0.01f)
         , mMouseWheelMultiplier(-1.1f)
         , mMinimumPivotDistance(0.01f)
         , mLastAction(ACTION_NONE)
