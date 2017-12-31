@@ -228,6 +228,7 @@ struct CommonUniforms {
     float _pad2;
     glm::vec2 view_size; // 2 * vec2(tan(fov_x/2), tan(fov_y/2))
     float cam_nearz;
+    float time;
 };
 #pragma pack(pop)
 
@@ -240,6 +241,7 @@ static std::string common_shader_code = R"glsl(
         vec3 eye_dir;
         vec2 view_size;
         float cam_nearz;
+        float time;
     };
 )glsl";
 static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
@@ -256,6 +258,17 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     readonly buffer octree_nodes {
         uint array[];
     };
+
+    // PRNG functions. Source: https://thebookofshaders.com/10.
+    float rand(float n) { return fract(sin(n) * 43758.5453123); }
+    float rand2(vec2 v, float ofs) { return rand(ofs + dot(v, vec2(12.9898,78.233))); }
+
+    // Triangular PDF dither.
+    // Optimal Dither and Noise Shaping in Image Processing, 2008, Cameron Nicklaus Christou.
+    float dither(vec2 uv, float time)
+    {
+        return (rand2(uv, time) + rand2(12.3456*uv, 76.5432*time) - 0.5) / 255.0;
+    }
 
     in vec2 uv;
     void main() {
@@ -294,7 +307,14 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         float optical_depth = t_out - t_in;
         vec3 extinction = vec3(4, 4, 4);
         vec3 transmittance = exp(-extinction * optical_depth);
-        // TODO: dither.
+
+        // Dither.
+        float t = fract(time);
+        transmittance += vec3(
+            dither(uv, t),
+            dither(uv, t + 100.0),
+            dither(uv, t + 200.0));
+
         gl_FragColor = vec4(transmittance, 1.0);
     }
     )glsl";
@@ -880,6 +900,7 @@ int main()
                 uniforms.view_size = glm::vec2(sz_x, sz_x / aspect_ratio);
                 uniforms.eye_orientation = glm::toMat3(g_camera.orientation);
                 uniforms.cam_nearz = cam_near;
+                uniforms.time = float(glfwGetTime());
 
                 glBindBuffer(GL_UNIFORM_BUFFER, common_ubo);
                 glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), &uniforms, GL_STATIC_DRAW);
