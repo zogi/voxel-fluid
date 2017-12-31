@@ -500,7 +500,7 @@ void CameraUI::tick()
 
 void CameraUI::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-    const bool pressed = action == GLFW_PRESS;
+    const bool pressed = action != GLFW_RELEASE;
     if (key == GLFW_KEY_W) {
         mMotionKeyState[0] = pressed;
     } else if (key == GLFW_KEY_S) {
