@@ -259,6 +259,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     readonly buffer octree_nodes {
         uint array[];
     };
+    uniform bool dithering_enabled = true;
 
     // PRNG functions. Source: https://thebookofshaders.com/10.
     float rand(float n) { return fract(sin(n) * 43758.5453123); }
@@ -310,11 +311,13 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         vec3 transmittance = exp(-extinction * optical_depth);
 
         // Dither.
-        float t = fract(time);
-        transmittance += vec3(
-            dither(uv, t),
-            dither(uv, t + 100.0),
-            dither(uv, t + 200.0));
+        if (dithering_enabled) {
+            float t = fract(time);
+            transmittance += vec3(
+                dither(uv, t),
+                dither(uv, t + 100.0),
+                dither(uv, t + 200.0));
+        }
 
         gl_FragColor = vec4(transmittance, 1.0);
     }
@@ -428,10 +431,15 @@ struct GUIState {
     bool test_window_open = false;
 };
 
+struct RenderSettings {
+    bool dither_voxels = true;
+};
+
 static Framebuffer g_framebuffer;
 static Camera g_camera;
 static float g_time_delta = 0;
 static GUIState g_gui_state;
+static RenderSettings g_render_settings;
 
 // === Camera controller ===
 
@@ -934,6 +942,9 @@ int main()
             // Draw quad.
             glUseProgram(otr_program);
             glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
+            const auto dithering_enabled_uniform_loc =
+                glGetUniformLocation(otr_program, "dithering_enabled");
+            glUniform1i(dithering_enabled_uniform_loc, g_render_settings.dither_voxels);
             glBindVertexArray(quad_vao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             GL_CHECK();
