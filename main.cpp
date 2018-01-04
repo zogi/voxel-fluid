@@ -716,6 +716,10 @@ int main()
     // Set up a buffer for common uniforms.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
+    glBindBufferBase(GL_UNIFORM_BUFFER, common_ubo_bind_point, common_ubo);
+    // Allocate storage.
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), nullptr, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GL_CHECK();
 
     // Set up the octree renderer program.
@@ -891,7 +895,8 @@ int main()
             {
                 const float aspect_ratio = g_framebuffer.width / (float)g_framebuffer.height;
 
-                CommonUniforms uniforms;
+                void *ubo_ptr = glMapNamedBuffer(common_ubo, GL_WRITE_ONLY);
+                CommonUniforms &uniforms = *reinterpret_cast<CommonUniforms *>(ubo_ptr);
                 uniforms.eye_pos = g_camera.eye_pos;
                 uniforms.eye_dir = g_camera.getForwardVector();
                 const auto view =
@@ -904,10 +909,7 @@ int main()
                 uniforms.eye_orientation = glm::toMat3(g_camera.orientation);
                 uniforms.cam_nearz = cam_near;
                 uniforms.time = float(glfwGetTime());
-
-                glBindBuffer(GL_UNIFORM_BUFFER, common_ubo);
-                glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), &uniforms, GL_STATIC_DRAW);
-                glBindBufferBase(GL_UNIFORM_BUFFER, common_ubo_bind_point, common_ubo);
+                glUnmapNamedBuffer(common_ubo);
             }
 
             // Draw cube.
