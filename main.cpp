@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/transform.hpp>
@@ -482,7 +483,7 @@ void CameraUI::tick()
     const auto forward_vector = mCamera->getForwardVector();
     const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
 
-    glm::vec3 pos_delta;
+    glm::vec3 pos_delta = glm::vec3(0);
 
     if (mMotionKeyState[0])
         pos_delta += forward_vector;
@@ -787,6 +788,7 @@ int main()
 
     // Init camera.
     g_camera.eye_pos = glm::vec3(0, 0, 2);
+    g_camera.orientation = glm::quat_identity<float, highp>();
     g_camera_ui.setWindow(window);
     g_camera_ui.setCamera(&g_camera);
     g_camera_ui.setEnabled(true);
@@ -855,7 +857,7 @@ int main()
     bool test_window_open = true;
 
     // Main loop.
-    glm::mat4 model;
+    glm::mat4 model = glm::mat4(1);
     while (!glfwWindowShouldClose(window)) {
 
         // Process messages.

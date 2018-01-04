@@ -7,6 +7,11 @@ conan_basic_setup(TARGETS)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# glm
+# link against: glm
+set(GLM_INSTALL_ENABLE OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/glm)
+
 # glfw
 # link against: glfw
 # Adding glfw as a submodule since I couldn't find a properly written conan
@@ -45,7 +50,7 @@ target_include_directories(variant INTERFACE
 find_package(OpenGL REQUIRED)
 
 # Main executable.
-set(LIBS variant imgui remotery glfw ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
+set(LIBS variant imgui remotery glfw glm ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
 file(GLOB SRC *.cpp)
 add_executable(fluid ${SRC})
 target_link_libraries(fluid
