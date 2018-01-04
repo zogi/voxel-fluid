@@ -409,9 +409,6 @@ void Framebuffer::init(int width, int height)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-// === Time delta ===
-static float g_time_delta = 0;
-
 // === Camera ===
 
 struct Camera {
@@ -424,6 +421,19 @@ struct Camera {
 };
 
 glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm::vec3(0, 0, -1)); }
+
+// === Global State ===
+
+struct GUIState {
+    bool test_window_open = false;
+};
+
+static Framebuffer g_framebuffer;
+static Camera g_camera;
+static float g_time_delta = 0;
+static GUIState g_gui_state;
+
+// === Camera controller ===
 
 // Modified version of cinder's CameraUI class (https://github.com/cinder/Cinder).
 
@@ -627,13 +637,6 @@ void CameraUI::scrollCallback(GLFWwindow *window, double xoffset, double yoffset
         std::max<float>(mCamera->pivot_distance * multiplier, mMinimumPivotDistance);
 }
 
-// === Global State ===
-
-static Framebuffer g_framebuffer;
-static Camera g_camera;
-static CameraUI g_camera_ui;
-
-// === GLFW input callbacks ===
 
 int main()
 {
@@ -710,7 +713,7 @@ int main()
     glClearColor(1, 1, 1, 1);
     glEnable(GL_FRAMEBUFFER_SRGB);
 
-    // Set up common uniform buffers.
+    // Set up a buffer for common uniforms.
     GLUBO common_ubo = GLUBO::create();
     constexpr GLuint common_ubo_bind_point = 1;
     GL_CHECK();
@@ -789,9 +792,10 @@ int main()
     // Init camera.
     g_camera.eye_pos = glm::vec3(0, 0, 2);
     g_camera.orientation = glm::quat_identity<float, highp>();
-    g_camera_ui.setWindow(window);
-    g_camera_ui.setCamera(&g_camera);
-    g_camera_ui.setEnabled(true);
+    static CameraUI camera_ui;
+    camera_ui.setWindow(window);
+    camera_ui.setCamera(&g_camera);
+    camera_ui.setEnabled(true);
 
     // Init imgui.
     ImGui_ImplGlfwGL3_Init(window, false);
@@ -812,11 +816,12 @@ int main()
         const auto &io = ImGui::GetIO();
         if (io.WantCaptureKeyboard)
             return;
+
         // Close window on ESC.
         if (key == GLFW_KEY_ESCAPE)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         // Camera.
-        g_camera_ui.keyCallback(window, key, scancode, action, mods);
+        camera_ui.keyCallback(window, key, scancode, action, mods);
     });
 
     glfwSetCharCallback(window, [](GLFWwindow *window, unsigned int codepoint) {
@@ -830,7 +835,7 @@ int main()
         if (io.WantCaptureMouse)
             return;
         // Camera.
-        g_camera_ui.cursorPositionCallback(window, xpos, ypos);
+        camera_ui.cursorPositionCallback(window, xpos, ypos);
     });
 
     glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) {
@@ -840,7 +845,7 @@ int main()
         if (io.WantCaptureMouse)
             return;
         // Camera.
-        g_camera_ui.mouseButtonCallback(window, button, action, mods);
+        camera_ui.mouseButtonCallback(window, button, action, mods);
     });
 
     glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
@@ -850,11 +855,8 @@ int main()
         if (io.WantCaptureMouse)
             return;
         // Camera.
-        g_camera_ui.scrollCallback(window, xoffset, yoffset);
+        camera_ui.scrollCallback(window, xoffset, yoffset);
     });
-
-    // Gui state.
-    bool test_window_open = true;
 
     // Main loop.
     glm::mat4 model = glm::mat4(1);
@@ -870,23 +872,22 @@ int main()
         // Build GUI.
         {
             ImGui::Text("Hello, world!");
-            if (test_window_open)
-                ImGui::ShowTestWindow(&test_window_open);
+            if (g_gui_state.test_window_open)
+                ImGui::ShowTestWindow(&g_gui_state.test_window_open);
         }
 
         // Update objects.
         {
-            g_camera_ui.tick();
+            camera_ui.tick();
         }
 
         // Draw.
         {
             glBindFramebuffer(GL_FRAMEBUFFER, g_framebuffer.fbo);
-            const auto unbind_fbo = finally([]() { glBindFramebuffer(GL_FRAMEBUFFER, 0); });
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // Fill and bind common uniforms.
+            // Fill common uniform data.
             {
                 const float aspect_ratio = g_framebuffer.width / (float)g_framebuffer.height;
 
@@ -948,13 +949,15 @@ int main()
             // Disable blending.
             glDisable(GL_BLEND);
 
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            GL_CHECK();
+
             // Copy framebuffer contents to the display framebuffer (window).
             glBindFramebuffer(GL_READ_FRAMEBUFFER, g_framebuffer.fbo);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // default FBO
             glBlitFramebuffer(
                 0, 0, g_framebuffer.width, g_framebuffer.height, 0, 0, g_framebuffer.width,
                 g_framebuffer.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 
         // Draw GUI.
