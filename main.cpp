@@ -489,7 +489,7 @@ private:
     float mInitialPivotDistance;
     float mMouseWheelMultiplier, mMinimumPivotDistance;
     int mLastAction;
-    std::array<bool, 4> mMotionKeyState;
+    std::array<bool, 6> mMotionKeyState;
 
     GLFWwindow *mWindow;
     bool mEnabled;
@@ -503,6 +503,7 @@ void CameraUI::tick()
     constexpr float CAMERA_SPEED = 2.0f; // units per second
     const auto forward_vector = mCamera->getForwardVector();
     const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
+    const auto up_vector = glm::rotate(mCamera->orientation, glm::vec3(0, 1, 0));
 
     glm::vec3 pos_delta = glm::vec3(0);
 
@@ -514,6 +515,10 @@ void CameraUI::tick()
         pos_delta -= right_vector;
     if (mMotionKeyState[3])
         pos_delta += right_vector;
+    if (mMotionKeyState[4])
+        pos_delta += up_vector;
+    if (mMotionKeyState[5])
+        pos_delta -= up_vector;
 
     pos_delta *= g_time_delta * CAMERA_SPEED;
     mCamera->eye_pos += pos_delta;
@@ -531,6 +536,10 @@ void CameraUI::keyCallback(GLFWwindow *window, int key, int scancode, int action
         mMotionKeyState[2] = pressed;
     } else if (key == GLFW_KEY_D) {
         mMotionKeyState[3] = pressed;
+    } else if (key == GLFW_KEY_Q) {
+        mMotionKeyState[4] = pressed;
+    } else if (key == GLFW_KEY_E) {
+        mMotionKeyState[5] = pressed;
     }
 }
 
