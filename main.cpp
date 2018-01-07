@@ -302,10 +302,11 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         return vec2(t_enter, t_exit);
     }
 
+    uniform vec3 voxel_extinction;
     vec3 getVoxelExtinction(ivec3 index)
     {
         if (length(vec3(index) - vec3(1.5, 1.5, 1.5)) < 2)
-            return vec3(4, 8, 4);
+            return voxel_extinction;
         else
             return vec3(0, 0, 0);
     }
@@ -510,6 +511,8 @@ struct GUIState {
 
 struct RenderSettings {
     bool dither_voxels = true;
+    glm::vec3 voxel_transmit_color = glm::vec3(0, 0, 0);
+    float voxel_extinction_intensity = 4.0f;
 };
 
 static Framebuffer g_framebuffer;
@@ -1232,6 +1235,24 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
+            // Voxel extinction color.
+            ImGui::PushID(2);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("transmit color");
+            ImGui::NextColumn();
+            ImGui::ColorPicker3("", &g_render_settings.voxel_transmit_color[0]);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            // Voxel extinction intensity.
+            ImGui::PushID(2);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("extinction intensity");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("", &g_render_settings.voxel_extinction_intensity, 0, 10);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
             ImGui::TreePop();
         }
         ImGui::PopID();
@@ -1556,12 +1577,26 @@ int main()
             glEnable(GL_BLEND);
             glBlendFunc(GL_ZERO, GL_SRC_COLOR);
 
-            // Draw quad.
+            // Set up the octree renderer program.
             glUseProgram(otr_program);
+            // Set depth texture unit.
             glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
-            const auto dithering_enabled_uniform_loc =
-                glGetUniformLocation(otr_program, "dithering_enabled");
-            glUniform1i(dithering_enabled_uniform_loc, g_render_settings.dither_voxels);
+            // Set dithering_enabled uniform.
+            {
+                const auto dithering_enabled_uniform_loc =
+                    glGetUniformLocation(otr_program, "dithering_enabled");
+                glUniform1i(dithering_enabled_uniform_loc, g_render_settings.dither_voxels);
+            }
+            // Set voxel_extinction uniform.
+            {
+                const auto extinction = g_render_settings.voxel_extinction_intensity *
+                                        (glm::vec3(1, 1, 1) - g_render_settings.voxel_transmit_color);
+                const auto voxel_extinction_uniform_loc =
+                    glGetUniformLocation(otr_program, "voxel_extinction");
+                glUniform3f(voxel_extinction_uniform_loc, extinction.r, extinction.g, extinction.b);
+            }
+
+            // Draw quad.
             glBindVertexArray(quad_vao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             GL_CHECK();
