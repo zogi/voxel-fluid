@@ -9,8 +9,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # glm
 # link against: glm
-set(GLM_INSTALL_ENABLE OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/glm)
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE
+    ${PROJECT_SOURCE_DIR}/external/glm)
 
 # glfw
 # link against: glfw
