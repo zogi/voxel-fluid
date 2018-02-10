@@ -50,8 +50,14 @@ target_include_directories(variant INTERFACE
 # OpenGL
 find_package(OpenGL REQUIRED)
 
+# eigen
+# link against: eigen
+add_library(eigen INTERFACE)
+target_include_directories(eigen INTERFACE
+    ${PROJECT_SOURCE_DIR}/external/eigen)
+
 # Main executable.
-set(LIBS variant imgui remotery glfw glm ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
+set(LIBS eigen variant imgui remotery glfw glm ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
 file(GLOB SRC *.cpp)
 add_executable(fluid ${SRC})
 target_link_libraries(fluid
