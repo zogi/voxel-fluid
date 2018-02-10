@@ -56,17 +56,22 @@ add_library(eigen INTERFACE)
 target_include_directories(eigen INTERFACE
     ${PROJECT_SOURCE_DIR}/external/eigen)
 
-# Main executable.
+# Main library (for unit testability).
+file(GLOB SRC *.cpp *.h)
+file(GLOB SRC_MAIN main.cpp)
+list(REMOVE_ITEM SRC ${SRC_MAIN})
+add_library(fluidlib STATIC ${SRC})
 set(LIBS eigen variant imgui remotery glfw glm ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
-file(GLOB SRC *.cpp)
-add_executable(fluid ${SRC})
-target_link_libraries(fluid
-    ${CONAN_TARGETS} ${LIBS})
+target_link_libraries(fluidlib ${CONAN_TARGETS} ${LIBS})
+
+# Main executable.
+add_executable(fluid main.cpp)
+target_link_libraries(fluid fluidlib)
 
 # Unit tests.
 file(GLOB TEST_SRC test/*.cpp)
 add_executable(unittest ${TEST_SRC})
-target_link_libraries(unittest ${CONAN_TARGETS} ${LIBS})
+target_link_libraries(unittest fluidlib)
 include(GoogleTest)
 gtest_add_tests(TARGET unittest)
 enable_testing()
