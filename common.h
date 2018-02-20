@@ -49,6 +49,31 @@ public:
 
     T &cell(int i, int j, int k) { return m_cells[cellIndex(i, j, k)]; }
     const T &cell(int i, int j, int k) const { return m_cells[cellIndex(i, j, k)]; }
+    T cellSafe(int i, int j, int k) const
+    {
+        if (isValid(i, j, k)) {
+            return cell(i, j, k);
+        } else {
+            return {};
+        }
+    }
+
+    T interpolate(Float x, Float y, Float z) const
+    {
+        const int i = int(x);
+        const int j = int(y);
+        const int k = int(z);
+        const auto alpha_x = x - i;
+        const auto v_yz = glm::mix(cellSafe(i, j, k), cellSafe(i + 1, j, k), alpha_x);
+        const auto v_Yz = glm::mix(cellSafe(i, j + 1, k), cellSafe(i + 1, j + 1, k), alpha_x);
+        const auto v_yZ = glm::mix(cellSafe(i, j, k + 1), cellSafe(i + 1, j, k + 1), alpha_x);
+        const auto v_YZ = glm::mix(cellSafe(i, j + 1, k + 1), cellSafe(i + 1, j + 1, k + 1), alpha_x);
+        const auto alpha_y = y - j;
+        const auto v_z = glm::mix(v_yz, v_Yz, alpha_y);
+        const auto v_Z = glm::mix(v_yZ, v_YZ, alpha_y);
+        const auto alpha_z = z - k;
+        return glm::mix(v_z, v_Z, alpha_z);
+    }
 
     GridSize3 size() const { return m_size; }
     size_t cellCount() const { return m_cell_count; }
@@ -92,6 +117,23 @@ public:
     Float u(int i, int j, int k) const { return m_u.cell(i, j, k); }
     Float v(int i, int j, int k) const { return m_v.cell(i, j, k); }
     Float w(int i, int j, int k) const { return m_w.cell(i, j, k); }
+
+    Float interpolateU(Float x, Float y, Float z) const { return m_u.interpolate(x, y, z); }
+    Float interpolateV(Float x, Float y, Float z) const { return m_v.interpolate(x, y, z); }
+    Float interpolateW(Float x, Float y, Float z) const { return m_w.interpolate(x, y, z); }
+
+    glm::tvec3<Float> velocity(int i, int j, int k) const
+    {
+        return { Float(0.5) * (m_u.cellSafe(i, j, k) + m_u.cellSafe(i + 1, j, k)),
+                 Float(0.5) * (m_v.cellSafe(i, j, k) + m_v.cellSafe(i, j + 1, k)),
+                 Float(0.5) * (m_w.cellSafe(i, j, k) + m_w.cellSafe(i, j, k + 1)) };
+    }
+
+    glm::tvec3<Float> interpolateVelocity(Float x, Float y, Float z) const
+    {
+        return { interpolateU(x + Float(0.5), y, z), interpolateV(x, y + Float(0.5), z),
+                 interpolateW(x, y, z + Float(0.5)) };
+    }
 
     Float divergence(int i, int j, int k) const
     {
