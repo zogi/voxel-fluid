@@ -47,8 +47,16 @@ public:
         initArray();
     }
 
-    T &cell(int i, int j, int k) { return m_cells[cellIndex(i, j, k)]; }
-    const T &cell(int i, int j, int k) const { return m_cells[cellIndex(i, j, k)]; }
+    T &cell(int i, int j, int k)
+    {
+        assert(isValid(i, j, k));
+        return m_cells[cellIndex(i, j, k)];
+    }
+    const T &cell(int i, int j, int k) const
+    {
+        assert(isValid(i, j, k));
+        return m_cells[cellIndex(i, j, k)];
+    }
     T cellSafe(int i, int j, int k) const
     {
         if (isValid(i, j, k)) {
