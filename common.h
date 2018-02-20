@@ -212,7 +212,7 @@ private:
     FluidGrid m_grid;
 
     // New typedef to have the option of running the solver at a higher precision.
-    typedef Float SimFloat;
+    typedef double SimFloat;
     typedef Eigen::SparseMatrix<SimFloat> SparseMatrix;
     typedef Eigen::Matrix<SimFloat, Eigen::Dynamic, 1> Vector;
     typedef Eigen::IncompleteCholesky<SimFloat> Preconditioner;
