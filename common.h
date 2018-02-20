@@ -33,6 +33,7 @@
 
 namespace sim {
 
+typedef double Float;
 typedef glm::ivec3 GridSize3;
 typedef GridSize3 GridIndex3;
 typedef glm::vec3 Velocity;
@@ -65,7 +66,7 @@ private:
     void initArray() { m_cells.resize(m_cell_count); }
 };
 
-template <typename DataInCell, typename Float = float>
+template <typename DataInCell>
 class MACGrid : public Grid<DataInCell> {
 public:
     typedef Grid<DataInCell> Super;
@@ -110,8 +111,7 @@ struct SmokeData {
 
 class FluidSim {
 public:
-    typedef double Float;
-    typedef MACGrid<SmokeData, Float> FluidGrid;
+    typedef MACGrid<SmokeData> FluidGrid;
 
     static constexpr int MAX_FLUID_CELL_COUNT = 8192;
 
