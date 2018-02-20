@@ -151,6 +151,9 @@ struct SmokeData {
     float concentration;
 };
 
+template <typename CellType>
+void advect(const MACGrid<CellType> &source_grid, Float dt, MACGrid<CellType> &dest_grid);
+
 class FluidSim {
 public:
     typedef MACGrid<SmokeData> FluidGrid;

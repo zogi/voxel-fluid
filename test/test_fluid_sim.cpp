@@ -100,3 +100,73 @@ TEST(GridInterpolate, AlongAxes)
         ASSERT_EQ(g.interpolate(0, 0, 0.75), 0.75);
     }
 }
+
+TEST(Advect, ExactCellAmount)
+{
+    typedef sim::MACGrid<double> MACGrid;
+    const double dx = 1.0;
+    const double dt = 1.0;
+    {
+        MACGrid src({ 2, 1, 1 }, dx), dst({ 2, 1, 1 }, dx);
+        src.cell(0, 0, 0) = 1;
+        src.cell(1, 0, 0) = 2;
+        for (int i = 0; i < 3; ++i)
+            src.u(i, 0, 0) = -1.0;
+        // Other velocity components are zero.
+        advect(src, dt, dst);
+        ASSERT_EQ(dst.cell(0, 0, 0), 2.0);
+        ASSERT_EQ(dst.cell(1, 0, 0), 0.0);
+    }
+    {
+        MACGrid src({ 1, 2, 1 }, dx), dst({ 1, 2, 1 }, dx);
+        src.cell(0, 0, 0) = 1;
+        src.cell(0, 1, 0) = 2;
+        for (int i = 0; i < 3; ++i)
+            src.v(0, i, 0) = -1.0;
+        // Other velocity components are zero.
+        advect(src, dt, dst);
+        ASSERT_EQ(dst.cell(0, 0, 0), 2.0);
+        ASSERT_EQ(dst.cell(0, 1, 0), 0.0);
+    }
+    {
+        MACGrid src({ 1, 1, 2 }, dx), dst({ 1, 1, 2 }, dx);
+        src.cell(0, 0, 0) = 1;
+        src.cell(0, 0, 1) = 2;
+        for (int i = 0; i < 3; ++i)
+            src.w(0, 0, i) = -1.0;
+        // Other velocity components are zero.
+        advect(src, dt, dst);
+        ASSERT_EQ(dst.cell(0, 0, 0), 2.0);
+        ASSERT_EQ(dst.cell(0, 0, 1), 0.0);
+        for (int i = 0; i < 2; ++i)
+            for (int j = 0; j < 2; ++j)
+                ASSERT_EQ(dst.u(i, 0, j), 0.0);
+        for (int i = 0; i < 2; ++i)
+            for (int j = 0; j < 2; ++j)
+                ASSERT_EQ(dst.v(0, i, j), 0.0);
+        for (int i = 0; i < 3; ++i)
+            ASSERT_EQ(dst.w(0, 0, i), -1.0);
+    }
+}
+
+TEST(Advect, ZeroFromEmptyCells)
+{
+    typedef sim::MACGrid<double> MACGrid;
+    const double dx = 1.0;
+    const double dt = 1.0;
+    {
+        MACGrid src({ 1, 1, 1 }, dx), dst({ 1, 1, 1 }, dx);
+        src.cell(0, 0, 0) = 42;
+        src.v(0, 0, 0) = -1;
+        src.v(0, 1, 0) = -1;
+        // Other velocity components are zero.
+        advect(src, dt, dst);
+        ASSERT_EQ(dst.cell(0, 0, 0), 0.0);
+        ASSERT_EQ(dst.u(0, 0, 0), 0.0);
+        ASSERT_EQ(dst.u(1, 0, 0), 0.0);
+        ASSERT_EQ(dst.v(0, 0, 0), -1.0);
+        ASSERT_EQ(dst.v(0, 1, 0), -1.0);
+        ASSERT_EQ(dst.w(0, 0, 0), 0.0);
+        ASSERT_EQ(dst.w(0, 0, 1), 0.0);
+    }
+}

@@ -1,5 +1,15 @@
 #include "common.h"
 
+template <>
+GLM_FUNC_QUALIFIER sim::SmokeData
+glm::mix<sim::SmokeData, sim::Float>(sim::SmokeData x, sim::SmokeData y, sim::Float alpha)
+{
+    sim::SmokeData res;
+    res.concentration = glm::mix(x.concentration, y.concentration, alpha);
+    res.temperature = glm::mix(x.temperature, y.temperature, alpha);
+    return res;
+}
+
 namespace sim {
 
 #ifdef __GNUG__
@@ -12,6 +22,63 @@ int popcnt(unsigned int a)
     return std::bitset<std::numeric_limits<unsigned int>::digits>(a).count();
 }
 #endif
+
+template <typename CellType>
+void advect(const MACGrid<CellType> &source_grid, Float dt, MACGrid<CellType> &dest_grid)
+{
+    // RK2
+    // xmid = x - 0.5 dt u(x)
+    // xnew = x - dt u(xmid)
+
+    const auto size = source_grid.size();
+
+    // Advect cell contents.
+    for (int i = 0; i < size.x; ++i)
+        for (int j = 0; j < size.y; ++j)
+            for (int k = 0; k < size.z; ++k) {
+                const auto p = glm::tvec3<Float>(i, j, k);
+                const auto mid_p = p - Float(0.5) * dt * source_grid.velocity(i, j, k);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
+                dest_grid.cell(i, j, k) = source_grid.interpolate(new_p.x, new_p.y, new_p.z);
+            }
+    // Advect the U velocity component.
+    for (int i = 0; i <= size.x; ++i)
+        for (int j = 0; j < size.y; ++j)
+            for (int k = 0; k < size.z; ++k) {
+                const auto p = glm::tvec3<Float>(i - 0.5, j, k);
+                const auto mid_p =
+                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
+                dest_grid.u(i, j, k) = source_grid.interpolateU(new_p.x, new_p.y, new_p.z);
+            }
+    // Advect the V velocity component.
+    for (int i = 0; i < size.x; ++i)
+        for (int j = 0; j <= size.y; ++j)
+            for (int k = 0; k < size.z; ++k) {
+                const auto p = glm::tvec3<Float>(i, j - 0.5, k);
+                const auto mid_p =
+                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
+                dest_grid.v(i, j, k) = source_grid.interpolateV(new_p.x, new_p.y, new_p.z);
+            }
+    // Advect the W velocity component.
+    for (int i = 0; i < size.x; ++i)
+        for (int j = 0; j < size.y; ++j)
+            for (int k = 0; k <= size.z; ++k) {
+                const auto p = glm::tvec3<Float>(i, j, k - 0.5);
+                const auto mid_p =
+                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
+                dest_grid.w(i, j, k) = source_grid.interpolateW(new_p.x, new_p.y, new_p.z);
+            }
+}
+
+#define INSTANTIATE_ADVECT(T) \
+    template void advect<T>(const MACGrid<T> &source_grid, Float dt, MACGrid<T> &dest_grid);
+
+INSTANTIATE_ADVECT(float)
+INSTANTIATE_ADVECT(double)
+INSTANTIATE_ADVECT(SmokeData)
 
 void FluidSim::pressureSolve()
 {
