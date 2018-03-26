@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
-#include "../common.h"
+#define FLS_USE_DOUBLE
+#define FLS_IMPLEMENTATION
+#include "../fluid_sim.h"
 #include <random>
 
 TEST(PressureSolve, DivergenceFreeFluidAfterSolve)
