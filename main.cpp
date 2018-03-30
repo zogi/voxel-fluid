@@ -486,7 +486,7 @@ struct GUIState {
     bool test_window_open = false;
     bool console_open = false;
     bool overlay_open = false;
-    bool settings_open = false;
+    bool settings_open = true;
 };
 
 struct RenderSettings {
