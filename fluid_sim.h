@@ -162,8 +162,8 @@ public:
 
     static constexpr int MAX_FLUID_CELL_COUNT = 8192;
 
-    FluidSim(int n, Float dx, Float dt, Float rho)
-        : m_size({ n, n, n })
+    FluidSim(const GridSize3 &size, Float dx, Float dt, Float rho)
+        : m_size(size)
         , m_dx(dx)
         , m_dt(dt)
         , m_rho(rho)

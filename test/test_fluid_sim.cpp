@@ -12,7 +12,7 @@ TEST(PressureSolve, DivergenceFreeFluidAfterSolve)
     std::default_random_engine gen(0);
 
     std::uniform_int_distribution<int> di(0, 1);
-    sim::FluidSim fluid_sim(n, 0.5, 0.6, 0.7);
+    sim::FluidSim fluid_sim({ n, n, n }, 0.5, 0.6, 0.7);
     auto &grid = fluid_sim.grid();
     for (int i = 0; i < n; ++i)
         for (int j = 0; j < n; ++j)
