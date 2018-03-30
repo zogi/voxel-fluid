@@ -1,4 +1,6 @@
 #include "common.h"
+#define FLS_IMPLEMENTATION
+#include "fluid_sim.h"
 
 using namespace glm;
 
@@ -1414,6 +1416,15 @@ int main()
     const auto &imgui_io = ImGui::GetIO();
     ImGui::StyleColorsClassic();
     Console console;
+
+    // Init fluid simulator and voxel texture.
+    const int fluid_fps = 30;
+    const auto fluid_res = sim::GridSize3(10, 10, 10);
+    sim::FluidSim fluid_sim(fluid_res, 1.0, 1.0 / fluid_fps, 1.0);
+    auto voxels = GLTexture::create();
+    glBindTexture(GL_TEXTURE_3D, voxels);
+    glTexStorage3D(GL_TEXTURE_3D, 1, GL_R8, fluid_res.x, fluid_res.y, fluid_res.z);
+    glBindTexture(GL_TEXTURE_3D, 0);
 
     // Event callbacks.
 
