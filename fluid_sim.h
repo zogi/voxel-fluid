@@ -90,6 +90,7 @@ public:
     }
     bool isValid(const GridIndex3 &idx) const { return isValid(idx.x, idx.y, idx.z); }
 
+    void clear() { m_cells.assign(m_cells.size(), T()); }
 
 private:
     const GridSize3 m_size;
@@ -174,6 +175,13 @@ public:
     const Float dx() const { return m_dx; }
     const Float oneOverDx() const { return m_scale; }
 
+    void clearVelocities()
+    {
+        m_u.clear();
+        m_v.clear();
+        m_w.clear();
+    }
+
 private:
     const Float m_dx, m_scale;
     Grid<Float> m_u, m_v, m_w;
@@ -252,6 +260,12 @@ public:
     }
 
     std::vector<SolidCell> &solidCells() { return m_solid_cells; }
+
+    Float pressure(int i, int j, int k) const
+    {
+        return Float(m_pressure[m_fluid_cell_linear_index.cell(i, j, k)]);
+    }
+    Float pressure(const GridIndex3 &idx) const { return pressure(idx.x, idx.y, idx.z); }
 
 private:
     const GridSize3 m_size;

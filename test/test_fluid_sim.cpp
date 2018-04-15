@@ -44,6 +44,83 @@ TEST(PressureSolve, DivergenceFreeFluidAfterSolve)
                     ASSERT_NEAR(grid.divergence(i, j, k), 0.0, FLOAT_TOLERANCE);
 }
 
+TEST(PressureSolve, WithNonMovingSolidCells)
+{
+    const auto testCase = [](int axis, sim::Float speed, sim::Float dx, sim::Float dt, sim::Float rho) {
+        constexpr double FLOAT_TOLERANCE = 1e-14;
+        sim::GridIndex3 delta = { 0, 0, 0 };
+        delta[axis] = 1;
+        sim::GridSize3 size = sim::GridSize3(1, 1, 1) + 2 * delta;
+        sim::FluidSim fluid_sim(size, dx, dt, rho);
+        auto &grid = fluid_sim.grid();
+        fluid_sim.solidCells().resize(1);
+
+        // Configuration: solid wall, fluid, fluid
+        // At the two boundaries of these 3 cells the u velocity component is -1.
+        fluid_sim.solidCells().at(0) = sim::SolidCell(0 * delta, { 0, 0, 0 });
+        grid.cell(0 * delta).concentration = 0; // wall
+        grid.cell(1 * delta).concentration = 1; // fluid
+        grid.cell(2 * delta).concentration = 1; // fluid
+        for (int i = 1; i < 3; ++i) {
+            if (axis == 0)
+                grid.u(i * delta) = -speed;
+            else if (axis == 1)
+                grid.v(i * delta) = -speed;
+            else if (axis == 2)
+                grid.w(i * delta) = -speed;
+        }
+        fluid_sim.pressureSolve();
+        // dt == dx == rho == 1 for simplicity
+        // grid.u(1, 0, 0) := -u
+        // Pressure in the fluid cells: p1 and p2
+        // Pressure in the solid: p1 + (u - 0)
+        // Laplacian of pressure in the fluid cell (1, 0, 0): 6*p1 - (p_solid) - p2 = 5*p1 - u - p2
+        // Laplacian of pressure in the fluid cell (2, 0, 0): 6*p2 - p1
+        // Divergence of u in fluid cell (1, 0, 0): 0
+        // Divergence of u in fluid cell (2, 0, 0): u
+        // The equation:
+        // 5*p1 -   p2 =  u
+        //  -p1 + 6*p2 = -u
+        // Solution: p1 = 5/29 * u; p2 = -4/29 * u
+        // If dt == dx == rho == 1 is not the case, the laplacian scales with dt/(rho*dx*dx),
+        // the divergence on the rhs and the terms added due to solid boundaries scale with 1/dx,
+        // so just scale the solution above computed above with (rho*dx)/dt.
+        const auto scale = rho * dx / dt;
+        ASSERT_NEAR(fluid_sim.pressure(1 * delta), 5.0 / 29.0 * speed * scale, FLOAT_TOLERANCE);
+        ASSERT_NEAR(fluid_sim.pressure(2 * delta), -4.0 / 29.0 * speed * scale, FLOAT_TOLERANCE);
+        // Should be divergence-free after pressure update.
+        fluid_sim.pressureUpdate();
+        ASSERT_NEAR(grid.divergence(1 * delta), 0.0, FLOAT_TOLERANCE);
+        ASSERT_NEAR(grid.divergence(2 * delta), 0.0, FLOAT_TOLERANCE);
+
+        // Mirror the configuration along the plane perpendicular to axis.
+        std::swap(grid.cell(0 * delta), grid.cell(2 * delta));
+        fluid_sim.solidCells().at(0) = sim::SolidCell(2 * delta, { 0, 0, 0 });
+        grid.clearVelocities();
+        for (int i = 1; i < 3; ++i) {
+            if (axis == 0)
+                grid.u(i * delta) = speed;
+            else if (axis == 1)
+                grid.v(i * delta) = speed;
+            else if (axis == 2)
+                grid.w(i * delta) = speed;
+        }
+        fluid_sim.pressureSolve();
+        ASSERT_NEAR(fluid_sim.pressure(0 * delta), -4.0 / 29.0 * speed * scale, FLOAT_TOLERANCE);
+        ASSERT_NEAR(fluid_sim.pressure(1 * delta), 5.0 / 29.0 * speed * scale, FLOAT_TOLERANCE);
+        // Should be divergence-free after pressure update.
+        fluid_sim.pressureUpdate();
+        ASSERT_NEAR(grid.divergence(0 * delta), 0.0, FLOAT_TOLERANCE);
+        ASSERT_NEAR(grid.divergence(1 * delta), 0.0, FLOAT_TOLERANCE);
+    };
+
+    for (int axis = 0; axis < 3; ++axis) {
+        testCase(axis, 1, 1, 1, 1);
+        testCase(axis, 0.1, 0.2, 0.3, 0.4);
+        testCase(axis, 9, 8, 7, 6);
+    }
+}
+
 TEST(GridInterpolate, ExactOnGridPoint)
 {
     constexpr double FLOAT_TOLERANCE = 1e-15;
