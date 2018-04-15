@@ -30,7 +30,8 @@ typedef float Float;
 
 typedef glm::ivec3 GridSize3;
 typedef GridSize3 GridIndex3;
-typedef glm::vec3 Velocity;
+typedef glm::tvec3<Float> Vector3;
+typedef Vector3 Velocity;
 
 template <typename T>
 class Grid {
@@ -59,6 +60,9 @@ public:
             return {};
         }
     }
+    T &cell(const GridIndex3 &idx) { return cell(idx.x, idx.y, idx.z); }
+    const T &cell(const GridIndex3 &idx) const { return cell(idx.x, idx.y, idx.z); }
+    T cellSafe(const GridIndex3 &idx) const { return cellSafe(idx.x, idx.y, idx.z); }
 
     T interpolate(Float x, Float y, Float z) const
     {
@@ -76,6 +80,7 @@ public:
         const auto alpha_z = z - k;
         return glm::mix(v_z, v_Z, alpha_z);
     }
+    T interpolate(const Vector3 v) const { return interpolate(v.x, v.y, v.z); }
 
     GridSize3 size() const { return m_size; }
     size_t cellCount() const { return m_cell_count; }
@@ -83,6 +88,7 @@ public:
     {
         return 0 <= i && i < m_size.x && 0 <= j && j < m_size.y && 0 <= k && k < m_size.z;
     }
+    bool isValid(const GridIndex3 &idx) const { return isValid(idx.x, idx.y, idx.z); }
 
     inline size_t cellIndex(int i, int j, int k) const { return i + m_size.x * (j + m_size.y * k); }
 
@@ -119,10 +125,19 @@ public:
     Float u(int i, int j, int k) const { return m_u.cell(i, j, k); }
     Float v(int i, int j, int k) const { return m_v.cell(i, j, k); }
     Float w(int i, int j, int k) const { return m_w.cell(i, j, k); }
+    Float &u(const GridIndex3 &idx) { return m_u.cell(idx); }
+    Float &v(const GridIndex3 &idx) { return m_v.cell(idx); }
+    Float &w(const GridIndex3 &idx) { return m_w.cell(idx); }
+    Float u(const GridIndex3 &idx) const { return m_u.cell(idx); }
+    Float v(const GridIndex3 &idx) const { return m_v.cell(idx); }
+    Float w(const GridIndex3 &idx) const { return m_w.cell(idx); }
 
     Float interpolateU(Float x, Float y, Float z) const { return m_u.interpolate(x, y, z); }
     Float interpolateV(Float x, Float y, Float z) const { return m_v.interpolate(x, y, z); }
     Float interpolateW(Float x, Float y, Float z) const { return m_w.interpolate(x, y, z); }
+    Float interpolateU(const Vector3 &v) const { return m_u.interpolate(v); }
+    Float interpolateV(const Vector3 &v) const { return m_v.interpolate(v); }
+    Float interpolateW(const Vector3 &v) const { return m_w.interpolate(v); }
 
     glm::tvec3<Float> velocity(int i, int j, int k) const
     {
@@ -130,11 +145,19 @@ public:
                  Float(0.5) * (m_v.cellSafe(i, j, k) + m_v.cellSafe(i, j + 1, k)),
                  Float(0.5) * (m_w.cellSafe(i, j, k) + m_w.cellSafe(i, j, k + 1)) };
     }
+    glm::tvec3<Float> velocity(const GridIndex3 &idx) const
+    {
+        return velocity(idx.x, idx.y, idx.z);
+    }
 
     glm::tvec3<Float> interpolateVelocity(Float x, Float y, Float z) const
     {
         return { interpolateU(x + Float(0.5), y, z), interpolateV(x, y + Float(0.5), z),
                  interpolateW(x, y, z + Float(0.5)) };
+    }
+    glm::tvec3<Float> interpolateVelocity(const Vector3 &v) const
+    {
+        return interpolateVelocity(v.x, v.y, v.z);
     }
 
     Float divergence(int i, int j, int k) const
@@ -142,6 +165,7 @@ public:
         return m_scale * (u(i + 1, j, k) - u(i, j, k) + v(i, j + 1, k) - v(i, j, k) +
                           w(i, j, k + 1) - w(i, j, k));
     }
+    Float divergence(const GridIndex3 &idx) const { return divergence(idx.x, idx.y, idx.z); }
 
 private:
     const Float m_dx, m_scale;
@@ -201,6 +225,7 @@ public:
             return CellType::Fluid;
         }
     }
+    CellType cellType(const GridIndex3 &idx) const { return cellType(idx.x, idx.y, idx.z); }
 
     CellType cellTypeBoundsChecked(int i, int j, int k) const
     {
@@ -210,6 +235,10 @@ public:
 
         return cellType(i, j, k);
     };
+    CellType cellTypeBoundsChecked(const GridIndex3 &idx) const
+    {
+        return cellTypeBoundsChecked(idx.x, idx.y, idx.z);
+    }
 
 private:
     const GridSize3 m_size;
