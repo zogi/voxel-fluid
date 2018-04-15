@@ -45,12 +45,12 @@ public:
     T &cell(int i, int j, int k)
     {
         assert(isValid(i, j, k));
-        return m_cells[cellIndex(i, j, k)];
+        return m_cells[linearCellIndex(i, j, k)];
     }
     const T &cell(int i, int j, int k) const
     {
         assert(isValid(i, j, k));
-        return m_cells[cellIndex(i, j, k)];
+        return m_cells[linearCellIndex(i, j, k)];
     }
     T cellSafe(int i, int j, int k) const
     {
@@ -90,13 +90,17 @@ public:
     }
     bool isValid(const GridIndex3 &idx) const { return isValid(idx.x, idx.y, idx.z); }
 
-    inline size_t cellIndex(int i, int j, int k) const { return i + m_size.x * (j + m_size.y * k); }
 
 private:
     const GridSize3 m_size;
     const size_t m_cell_count;
     std::vector<T> m_cells;
     void initArray() { m_cells.resize(m_cell_count); }
+
+    inline size_t linearCellIndex(int i, int j, int k) const
+    {
+        return i + m_size.x * (j + m_size.y * k);
+    }
 };
 
 template <typename DataInCell>
@@ -209,35 +213,25 @@ public:
     void pressureSolve();
     void pressureUpdate();
 
-    enum class CellType : uint8_t {
-        Empty,
-        Fluid
-        // TODO: solid wall
-    };
-
-    CellType cellType(int i, int j, int k) const
+    bool isFluidCell(int i, int j, int k) const
     {
-        constexpr Float EMPTY_THRESHOLD = Float(1e-6);
+        constexpr Float CONCENTRATION_EMPTY_THRESHOLD = Float(1e-6);
         const auto &cell = m_grid.cell(i, j, k);
-        if (cell.concentration < EMPTY_THRESHOLD) {
-            return CellType::Empty;
-        } else {
-            return CellType::Fluid;
-        }
+        return cell.concentration >= CONCENTRATION_EMPTY_THRESHOLD;
     }
-    CellType cellType(const GridIndex3 &idx) const { return cellType(idx.x, idx.y, idx.z); }
+    bool isFluidCell(const GridIndex3 &idx) const { return isFluidCell(idx.x, idx.y, idx.z); }
 
-    CellType cellTypeBoundsChecked(int i, int j, int k) const
+    bool isFluidCellBoundsChecked(int i, int j, int k) const
     {
         if (!m_grid.isValid(i, j, k)) {
-            return CellType::Empty;
+            return false;
         }
 
-        return cellType(i, j, k);
+        return isFluidCell(i, j, k);
     };
-    CellType cellTypeBoundsChecked(const GridIndex3 &idx) const
+    bool isFluidCellBoundsChecked(const GridIndex3 &idx) const
     {
-        return cellTypeBoundsChecked(idx.x, idx.y, idx.z);
+        return isFluidCellBoundsChecked(idx.x, idx.y, idx.z);
     }
 
 private:
@@ -246,17 +240,18 @@ private:
     FluidGrid m_grid;
 
     // New typedef to have the option of running the solver at a higher precision.
-    typedef double SimFloat;
-    typedef Eigen::SparseMatrix<SimFloat> SparseMatrix;
-    typedef Eigen::Matrix<SimFloat, Eigen::Dynamic, 1> Vector;
-    typedef Eigen::IncompleteCholesky<SimFloat> Preconditioner;
-    typedef Eigen::ConjugateGradient<SparseMatrix, Eigen::Lower | Eigen::Upper, Preconditioner> Solver;
+    typedef double SolverFloat;
+    typedef Eigen::SparseMatrix<SolverFloat> SolverSparseMatrix;
+    typedef Eigen::Matrix<SolverFloat, Eigen::Dynamic, 1> SolverVector;
+    typedef Eigen::IncompleteCholesky<SolverFloat> Preconditioner;
+    typedef Eigen::ConjugateGradient<SolverSparseMatrix, Eigen::Lower | Eigen::Upper, Preconditioner> Solver;
 
     // Temporary storage for pressure solve.
     typedef uint16_t FluidCellIndex;
     std::vector<GridIndex3> m_fluid_cell_grid_index;
     Grid<FluidCellIndex> m_fluid_cell_linear_index;
 
+    enum class CellType : uint8_t { Empty = 0, Fluid = 1, Solid = 2 };
     struct CellNeighbors {
         CellType iplus : 2;
         CellType iminus : 2;
@@ -266,8 +261,8 @@ private:
         CellType kminus : 2;
     };
     std::vector<CellNeighbors> m_cell_neighbors;
-    Vector m_pressure_rhs, m_pressure;
-    SparseMatrix m_pressure_mtx;
+    SolverVector m_pressure_rhs, m_pressure;
+    SolverSparseMatrix m_pressure_mtx;
 };
 
 } // namespace sim
@@ -360,7 +355,6 @@ INSTANTIATE_ADVECT(SmokeData)
 void FluidSim::pressureSolve()
 {
     // Set up right hand side.
-
     const auto setupRHS = [this]() {
         FluidCellIndex idx = 0;
         m_cell_neighbors.clear();
@@ -372,7 +366,7 @@ void FluidSim::pressureSolve()
                     if (idx == MAX_FLUID_CELL_COUNT)
                         return;
 
-                    if (cellType(i, j, k) != CellType::Fluid) {
+                    if (!isFluidCell(i, j, k)) {
                         continue;
                     }
                     m_fluid_cell_linear_index.cell(i, j, k) = idx;
@@ -380,12 +374,12 @@ void FluidSim::pressureSolve()
 
                     m_pressure_rhs[idx] = -m_grid.divergence(i, j, k);
                     CellNeighbors cell_neighbors;
-                    cell_neighbors.iplus = cellTypeBoundsChecked(i + 1, j, k);
-                    cell_neighbors.iminus = cellTypeBoundsChecked(i - 1, j, k);
-                    cell_neighbors.jplus = cellTypeBoundsChecked(i, j + 1, k);
-                    cell_neighbors.jminus = cellTypeBoundsChecked(i, j - 1, k);
-                    cell_neighbors.kplus = cellTypeBoundsChecked(i, j, k + 1);
-                    cell_neighbors.kminus = cellTypeBoundsChecked(i, j, k - 1);
+                    cell_neighbors.iplus = CellType(isFluidCellBoundsChecked(i + 1, j, k));
+                    cell_neighbors.iminus = CellType(isFluidCellBoundsChecked(i - 1, j, k));
+                    cell_neighbors.jplus = CellType(isFluidCellBoundsChecked(i, j + 1, k));
+                    cell_neighbors.jminus = CellType(isFluidCellBoundsChecked(i, j - 1, k));
+                    cell_neighbors.kplus = CellType(isFluidCellBoundsChecked(i, j, k + 1));
+                    cell_neighbors.kminus = CellType(isFluidCellBoundsChecked(i, j, k - 1));
                     m_cell_neighbors.push_back(cell_neighbors);
 
                     ++idx;
@@ -410,7 +404,7 @@ void FluidSim::pressureSolve()
         const int i = grid_index.x;
         const int j = grid_index.y;
         const int k = grid_index.z;
-        if (cellType(i, j, k) != CellType::Fluid) {
+        if (!isFluidCell(i, j, k)) {
             continue;
         }
         // Fill this nonzero coeffs of this column in order:
