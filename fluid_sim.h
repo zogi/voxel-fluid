@@ -171,6 +171,9 @@ public:
     }
     Float divergence(const GridIndex3 &idx) const { return divergence(idx.x, idx.y, idx.z); }
 
+    const Float dx() const { return m_dx; }
+    const Float oneOverDx() const { return m_scale; }
+
 private:
     const Float m_dx, m_scale;
     Grid<Float> m_u, m_v, m_w;
@@ -183,6 +186,20 @@ struct SmokeData {
 
 template <typename CellType>
 FLS_API void advect(const MACGrid<CellType> &source_grid, Float dt, MACGrid<CellType> &dest_grid);
+
+struct SolidCell {
+    int i, j, k;
+    Float u, v, w;
+    SolidCell() = default;
+    SolidCell(const GridIndex3 &idx, const Vector3 &velocity)
+        : i(idx.x), j(idx.y), k(idx.z), u(velocity.x), v(velocity.y), w(velocity.z)
+    {
+    }
+    SolidCell(int i_, int j_, int k_, Float u_, Float v_, Float w_)
+        : i(i_), j(j_), k(k_), u(u_), v(v_), w(w_)
+    {
+    }
+};
 
 class FluidSim {
 public:
@@ -234,10 +251,13 @@ public:
         return isFluidCellBoundsChecked(idx.x, idx.y, idx.z);
     }
 
+    std::vector<SolidCell> &solidCells() { return m_solid_cells; }
+
 private:
     const GridSize3 m_size;
     const Float m_dx, m_dt, m_rho;
     FluidGrid m_grid;
+    std::vector<SolidCell> m_solid_cells;
 
     // New typedef to have the option of running the solver at a higher precision.
     typedef double SolverFloat;
@@ -384,6 +404,44 @@ void FluidSim::pressureSolve()
 
                     ++idx;
                 }
+
+        // Add terms due to solid boundaries.
+        const auto scale = m_grid.oneOverDx();
+        for (const auto solid : m_solid_cells) {
+            const int i = solid.i;
+            const int j = solid.j;
+            const int k = solid.k;
+            if (isFluidCellBoundsChecked(i - 1, j, k)) {
+                const int idx = m_fluid_cell_linear_index.cell(i - 1, j, k);
+                m_cell_neighbors[idx].iplus = CellType::Solid;
+                m_pressure_rhs[idx] += scale * (m_grid.u(i, j, k) - solid.u);
+            }
+            if (isFluidCellBoundsChecked(i + 1, j, k)) {
+                const int idx = m_fluid_cell_linear_index.cell(i + 1, j, k);
+                m_cell_neighbors[idx].iminus = CellType::Solid;
+                m_pressure_rhs[idx] -= scale * (m_grid.u(i + 1, j, k) - solid.u);
+            }
+            if (isFluidCellBoundsChecked(i, j - 1, k)) {
+                const int idx = m_fluid_cell_linear_index.cell(i, j - 1, k);
+                m_cell_neighbors[idx].jplus = CellType::Solid;
+                m_pressure_rhs[idx] += scale * (m_grid.v(i, j, k) - solid.v);
+            }
+            if (isFluidCellBoundsChecked(i, j + 1, k)) {
+                const int idx = m_fluid_cell_linear_index.cell(i, j + 1, k);
+                m_cell_neighbors[idx].jminus = CellType::Solid;
+                m_pressure_rhs[idx] -= scale * (m_grid.v(i, j + 1, k) - solid.v);
+            }
+            if (isFluidCellBoundsChecked(i, j, k - 1)) {
+                const int idx = m_fluid_cell_linear_index.cell(i, j, k - 1);
+                m_cell_neighbors[idx].kplus = CellType::Solid;
+                m_pressure_rhs[idx] += scale * (m_grid.w(i, j, k) - solid.w);
+            }
+            if (isFluidCellBoundsChecked(i, j, k + 1)) {
+                const int idx = m_fluid_cell_linear_index.cell(i, j, k + 1);
+                m_cell_neighbors[idx].kminus = CellType::Solid;
+                m_pressure_rhs[idx] -= scale * (m_grid.w(i, j, k + 1) - solid.w);
+            }
+        }
     };
     setupRHS();
 
@@ -423,7 +481,11 @@ void FluidSim::pressureSolve()
             m_pressure_mtx.insert(col, row) = -scale;
         }
         {
-            const auto nonsolid_count = 6; // TODO: calculate actual count
+            const auto isSolid = [](CellType ct) -> int { return ct == CellType::Solid; };
+            const auto solid_count = isSolid(cell_neighbors.iminus) + isSolid(cell_neighbors.iplus) +
+                                     isSolid(cell_neighbors.jminus) + isSolid(cell_neighbors.jplus) +
+                                     isSolid(cell_neighbors.kminus) + isSolid(cell_neighbors.kplus);
+            const auto nonsolid_count = 6 - solid_count;
             m_pressure_mtx.insert(row, row) = nonsolid_count * scale;
         }
         if (cell_neighbors.iplus == CellType::Fluid) {
@@ -467,6 +529,18 @@ void FluidSim::pressureUpdate()
         m_grid.v(i, j + 1, k) += p;
         m_grid.w(i, j, k) -= p;
         m_grid.w(i, j, k + 1) += p;
+    }
+    for (const auto solid : m_solid_cells) {
+        const int i = solid.i;
+        const int j = solid.j;
+        const int k = solid.k;
+        // TODO: slippery boundary
+        m_grid.u(i, j, k) = solid.u;
+        m_grid.u(i + 1, j, k) = solid.u;
+        m_grid.v(i, j, k) = solid.v;
+        m_grid.v(i, j + 1, k) = solid.v;
+        m_grid.w(i, j, k) = solid.w;
+        m_grid.w(i, j, k + 1) = solid.w;
     }
 }
 
