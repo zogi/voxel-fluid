@@ -455,7 +455,6 @@ void FluidSim::pressureUpdate()
     // TODO: variable density.
     const Float rho = density();
     const Float scale = m_dt / (rho * m_dx);
-#pragma omp parallel for
     for (int idx = 0; idx < m_fluid_cell_grid_index.size(); ++idx) {
         const auto &grid_index = m_fluid_cell_grid_index[idx];
         const int i = grid_index.x;
