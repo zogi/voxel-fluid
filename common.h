@@ -26,4 +26,9 @@
 #include <memory>
 #include <cstdio>
 
+#if _MSC_VER
+// Disable warning about strcpy, sprintf and sscanf may be unsafe.
+#pragma warning(disable : 4996)
+#endif
+
 #endif
