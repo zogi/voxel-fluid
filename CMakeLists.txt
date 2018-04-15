@@ -73,7 +73,7 @@ add_executable(fluid ${SRC})
 target_link_libraries(fluid ${CONAN_TARGETS} ${LIBS})
 
 # Unit tests.
-file(GLOB TEST_SRC test/*.cpp)
+file(GLOB TEST_SRC test/*.cpp *.h)
 add_executable(unittest ${TEST_SRC})
 target_link_libraries(unittest fluid_sim CONAN_PKG::gtest)
 include(GoogleTest)
