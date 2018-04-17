@@ -352,38 +352,35 @@ void advect(const MACGrid<CellType> &source_grid, Float dt, MACGrid<CellType> &d
             for (int k = 0; k < size.z; ++k) {
                 const auto p = glm::tvec3<Float>(i, j, k);
                 const auto mid_p = p - Float(0.5) * dt * source_grid.velocity(i, j, k);
-                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
-                dest_grid.cell(i, j, k) = source_grid.interpolate(new_p.x, new_p.y, new_p.z);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p);
+                dest_grid.cell(i, j, k) = source_grid.interpolate(new_p);
             }
     // Advect the U velocity component.
     for (int i = 0; i <= size.x; ++i)
         for (int j = 0; j < size.y; ++j)
             for (int k = 0; k < size.z; ++k) {
                 const auto p = glm::tvec3<Float>(i - 0.5, j, k);
-                const auto mid_p =
-                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
-                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
-                dest_grid.u(i, j, k) = source_grid.interpolateU(new_p.x, new_p.y, new_p.z);
+                const auto mid_p = p - Float(0.5) * dt * source_grid.interpolateVelocity(p);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p);
+                dest_grid.u(i, j, k) = source_grid.interpolateU(new_p);
             }
     // Advect the V velocity component.
     for (int i = 0; i < size.x; ++i)
         for (int j = 0; j <= size.y; ++j)
             for (int k = 0; k < size.z; ++k) {
                 const auto p = glm::tvec3<Float>(i, j - 0.5, k);
-                const auto mid_p =
-                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
-                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
-                dest_grid.v(i, j, k) = source_grid.interpolateV(new_p.x, new_p.y, new_p.z);
+                const auto mid_p = p - Float(0.5) * dt * source_grid.interpolateVelocity(p);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p);
+                dest_grid.v(i, j, k) = source_grid.interpolateV(new_p);
             }
     // Advect the W velocity component.
     for (int i = 0; i < size.x; ++i)
         for (int j = 0; j < size.y; ++j)
             for (int k = 0; k <= size.z; ++k) {
                 const auto p = glm::tvec3<Float>(i, j, k - 0.5);
-                const auto mid_p =
-                    p - Float(0.5) * dt * source_grid.interpolateVelocity(p.x, p.y, p.z);
-                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p.x, mid_p.y, mid_p.z);
-                dest_grid.w(i, j, k) = source_grid.interpolateW(new_p.x, new_p.y, new_p.z);
+                const auto mid_p = p - Float(0.5) * dt * source_grid.interpolateVelocity(p);
+                const auto new_p = p - dt * source_grid.interpolateVelocity(mid_p);
+                dest_grid.w(i, j, k) = source_grid.interpolateW(new_p);
             }
 }
 
