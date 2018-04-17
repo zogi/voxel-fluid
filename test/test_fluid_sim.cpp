@@ -224,8 +224,9 @@ TEST(Advect, ExactCellAmount)
         for (int i = 0; i < 2; ++i)
             for (int j = 0; j < 2; ++j)
                 ASSERT_EQ(dst.v(0, i, j), 0.0);
-        for (int i = 0; i < 3; ++i)
-            ASSERT_EQ(dst.w(0, 0, i), -1.0);
+        ASSERT_EQ(dst.w(0, 0, 0), -1.0);
+        ASSERT_EQ(dst.w(0, 0, 1), -1.0);
+        ASSERT_EQ(dst.w(0, 0, 2), -0.5);
     }
 }
 
@@ -245,8 +246,48 @@ TEST(Advect, ZeroFromEmptyCells)
         ASSERT_EQ(dst.u(0, 0, 0), 0.0);
         ASSERT_EQ(dst.u(1, 0, 0), 0.0);
         ASSERT_EQ(dst.v(0, 0, 0), -1.0);
-        ASSERT_EQ(dst.v(0, 1, 0), -1.0);
+        ASSERT_EQ(dst.v(0, 1, 0), -0.5);
         ASSERT_EQ(dst.w(0, 0, 0), 0.0);
         ASSERT_EQ(dst.w(0, 0, 1), 0.0);
+    }
+}
+
+namespace {
+double &velocityComponent(sim::MACGrid<double> &mac_grid, int axis, const sim::GridIndex3 &idx)
+{
+    if (axis == 0)
+        return mac_grid.u(idx);
+    if (axis == 1)
+        return mac_grid.v(idx);
+    if (axis == 2)
+        return mac_grid.w(idx);
+    abort();
+}
+} // unnamed namespace
+
+TEST(Advect, VelocitiesAreAdvected)
+{
+    typedef sim::MACGrid<double> MACGrid;
+    const double dx = 1.0;
+    const double dt = 1.0;
+    for (int axis = 0; axis < 3; ++axis) {
+        sim::GridIndex3 delta = { 0, 0, 0 };
+        delta[axis] = 1;
+        sim::GridSize3 size = sim::GridSize3(1, 1, 1) + 3 * delta;
+        MACGrid src(size, dx), dst(size, dx);
+
+        velocityComponent(src, axis, 0 * delta) = 0;
+        velocityComponent(src, axis, 1 * delta) = -1;
+        velocityComponent(src, axis, 2 * delta) = -2;
+        velocityComponent(src, axis, 3 * delta) = -1;
+        velocityComponent(src, axis, 4 * delta) = 0;
+
+        sim::advect(src, dt, dst);
+
+        ASSERT_EQ(velocityComponent(dst, axis, 0 * delta), 0);
+        ASSERT_EQ(velocityComponent(dst, axis, 1 * delta), -1.5);
+        ASSERT_EQ(velocityComponent(dst, axis, 2 * delta), -1);
+        ASSERT_EQ(velocityComponent(dst, axis, 3 * delta), -0.5);
+        ASSERT_EQ(velocityComponent(dst, axis, 4 * delta), 0);
     }
 }

@@ -137,12 +137,21 @@ public:
     Float v(const GridIndex3 &idx) const { return m_v.cell(idx); }
     Float w(const GridIndex3 &idx) const { return m_w.cell(idx); }
 
-    Float interpolateU(Float x, Float y, Float z) const { return m_u.interpolate(x, y, z); }
-    Float interpolateV(Float x, Float y, Float z) const { return m_v.interpolate(x, y, z); }
-    Float interpolateW(Float x, Float y, Float z) const { return m_w.interpolate(x, y, z); }
-    Float interpolateU(const Vector3 &v) const { return m_u.interpolate(v); }
-    Float interpolateV(const Vector3 &v) const { return m_v.interpolate(v); }
-    Float interpolateW(const Vector3 &v) const { return m_w.interpolate(v); }
+    Float interpolateU(Float x, Float y, Float z) const
+    {
+        return m_u.interpolate(x + Float(0.5), y, z);
+    }
+    Float interpolateV(Float x, Float y, Float z) const
+    {
+        return m_v.interpolate(x, y + Float(0.5), z);
+    }
+    Float interpolateW(Float x, Float y, Float z) const
+    {
+        return m_w.interpolate(x, y, z + Float(0.5));
+    }
+    Float interpolateU(const Vector3 &v) const { return interpolateU(v.x, v.y, v.z); }
+    Float interpolateV(const Vector3 &v) const { return interpolateV(v.x, v.y, v.z); }
+    Float interpolateW(const Vector3 &v) const { return interpolateW(v.x, v.y, v.z); }
 
     glm::tvec3<Float> velocity(int i, int j, int k) const
     {
@@ -157,8 +166,7 @@ public:
 
     glm::tvec3<Float> interpolateVelocity(Float x, Float y, Float z) const
     {
-        return { interpolateU(x + Float(0.5), y, z), interpolateV(x, y + Float(0.5), z),
-                 interpolateW(x, y, z + Float(0.5)) };
+        return { interpolateU(x, y, z), interpolateV(x, y, z), interpolateW(x, y, z) };
     }
     glm::tvec3<Float> interpolateVelocity(const Vector3 &v) const
     {
