@@ -47,12 +47,12 @@ public:
     T &cell(const GridIndex3 &idx)
     {
         assert(isValid(idx));
-        return cell(linearCellIndex(idx));
+        return cell(indexLinearFromGrid(idx));
     }
     const T &cell(const GridIndex3 &idx) const
     {
         assert(isValid(idx));
-        return cell(linearCellIndex(idx));
+        return cell(indexLinearFromGrid(idx));
     }
     T cellSafe(const GridIndex3 &idx) const
     {
@@ -94,16 +94,21 @@ public:
 
     void clear() { m_cells.assign(m_cells.size(), T()); }
 
+    size_t indexLinearFromGrid(const GridIndex3 &idx) const
+    {
+        return idx.x + m_size.x * (idx.y + m_size.y * idx.z);
+    }
+
+    GridIndex3 indexGridFromLinear(size_t idx) const
+    {
+        return { idx % m_size.x, (idx / m_size.x) % m_size.y, idx / (m_size.x * m_size.y) };
+    }
+
 private:
     const GridSize3 m_size;
     const size_t m_cell_count;
     std::vector<T> m_cells;
     void initArray() { m_cells.resize(m_cell_count); }
-
-    inline size_t linearCellIndex(int i, int j, int k) const
-    {
-        return i + m_size.x * (j + m_size.y * k);
-    }
 };
 
 template <typename DataInCell>
