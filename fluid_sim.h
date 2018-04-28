@@ -204,6 +204,10 @@ public:
         m_w.clear();
     }
 
+    const Grid<Float> &uGrid() const { return m_u; }
+    const Grid<Float> &vGrid() const { return m_v; }
+    const Grid<Float> &wGrid() const { return m_w; }
+
 private:
     const Float m_dx, m_scale;
     Grid<Float> m_u, m_v, m_w;
