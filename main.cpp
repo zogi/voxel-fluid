@@ -399,7 +399,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     }
     )glsl";
 
-static std::string simple_vs_code = common_shader_code + R"glsl(
+static std::string color_cube_vs_code = common_shader_code + R"glsl(
     in vec3 pos;
     out vec3 color;
     void main() {
@@ -407,24 +407,20 @@ static std::string simple_vs_code = common_shader_code + R"glsl(
         color = pos + 0.5;
     }
     )glsl";
-static std::string simple_fs_code = common_shader_code + R"glsl(
+static std::string color_cube_fs_code = common_shader_code + R"glsl(
     in vec3 color;
     void main() {
         gl_FragColor = vec4(color, 1.0);
     }
     )glsl";
 
-// === Quad vertices ===
-
-static const glm::vec2 vertices[6] = { { -1.0f, -1.0f }, { 1.0f, 1.0f },   { -1.0f, 1.0f },
-                                       { 1.0f, 1.0f },   { -1.0f, -1.0f }, { 1.0f, -1.0f } };
 
 // === Cube VAO ===
 
-static const uint16_t cube_indices[] = { 4, 2, 0, 6, 2, 4, 3, 5, 1, 7, 5, 3, 2, 1, 0, 3, 1, 2,
-                                         5, 6, 4, 7, 6, 5, 1, 4, 0, 5, 4, 1, 6, 3, 2, 7, 3, 6 };
 static GLVAO createCubeVAO()
 {
+    const uint16_t cube_indices[] = { 4, 2, 0, 6, 2, 4, 3, 5, 1, 7, 5, 3, 2, 1, 0, 3, 1, 2,
+                                      5, 6, 4, 7, 6, 5, 1, 4, 0, 5, 4, 1, 6, 3, 2, 7, 3, 6 };
     GLVAO cube_vao = GLVAO::create();
     glBindVertexArray(cube_vao);
 
@@ -437,14 +433,14 @@ static GLVAO createCubeVAO()
     GLuint vertex_buffer;
     glGenBuffers(1, &vertex_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-    std::vector<float> vertices;
-    vertices.reserve(3 * 8);
+    std::vector<float> quad_vertices;
+    quad_vertices.reserve(3 * 8);
     for (int i = 0; i < 8; ++i) {
-        vertices.push_back(float((i & 1) >> 0) - 0.5f);
-        vertices.push_back(float((i & 2) >> 1) - 0.5f);
-        vertices.push_back(float((i & 4) >> 2) - 0.5f);
+        quad_vertices.push_back(float((i & 1) >> 0) - 0.5f);
+        quad_vertices.push_back(float((i & 2) >> 1) - 0.5f);
+        quad_vertices.push_back(float((i & 4) >> 2) - 0.5f);
     }
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, quad_vertices.size() * sizeof(float), quad_vertices.data(), GL_STATIC_DRAW);
     GL_CHECK();
     glBindVertexArray(0);
     return cube_vao;
@@ -1206,6 +1202,7 @@ static void ShowSettings(bool *p_open)
         ImGui::PushID(0);
         ImGui::AlignTextToFramePadding();
         ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
+
         const bool node_open = ImGui::TreeNode("Object", "Rendering");
         ImGui::NextColumn();
         ImGui::AlignTextToFramePadding();
@@ -1387,30 +1384,32 @@ int main()
         GL_CHECK();
     }
 
-    // Set up the simple program.
-    GLProgram simple_program;
+    // Set up the program to draw the colorful cube.
+    GLProgram color_cube_program;
     {
         std::vector<GLShader> shaders;
-        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, simple_vs_code.c_str()));
-        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, simple_fs_code.c_str()));
-        simple_program = createAndLinkProgram(shaders);
+        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, color_cube_vs_code.c_str()));
+        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, color_cube_fs_code.c_str()));
+        color_cube_program = createAndLinkProgram(shaders);
         GL_CHECK();
 
         // Common uniforms.
-        auto common_ubo_index = glGetUniformBlockIndex(simple_program, "CommonUniforms");
+        auto common_ubo_index = glGetUniformBlockIndex(color_cube_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(simple_program, common_ubo_index, common_ubo_bind_point);
+            glUniformBlockBinding(color_cube_program, common_ubo_index, common_ubo_bind_point);
         GL_CHECK();
     }
 
     // Set up quad vertex data for the octree renderer program.
     auto quad_vao = GLVAO::create();
     {
+        const glm::vec2 quad_vertices[6] = { { -1.0f, -1.0f }, { 1.0f, 1.0f },   { -1.0f, 1.0f },
+                                             { 1.0f, 1.0f },   { -1.0f, -1.0f }, { 1.0f, -1.0f } };
         glBindVertexArray(quad_vao);
         GLuint quad_vertex_buffer;
         glGenBuffers(1, &quad_vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, quad_vertex_buffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
         const auto vpos_location = glGetAttribLocation(otr_program, "pos");
         glEnableVertexAttribArray(vpos_location);
         glVertexAttribPointer(vpos_location, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), (void *)0);
@@ -1422,7 +1421,7 @@ int main()
     auto cube_vao = createCubeVAO();
     {
         glBindVertexArray(cube_vao);
-        const auto vpos_location = glGetAttribLocation(simple_program, "pos");
+        const auto vpos_location = glGetAttribLocation(color_cube_program, "pos");
         glEnableVertexAttribArray(vpos_location);
         glVertexAttribPointer(vpos_location, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void *)0);
         glBindVertexArray(0);
@@ -1617,7 +1616,7 @@ int main()
             }
 
             // Draw cube.
-            glUseProgram(simple_program);
+            glUseProgram(color_cube_program);
             glBindVertexArray(cube_vao);
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, nullptr);
             GL_CHECK();
