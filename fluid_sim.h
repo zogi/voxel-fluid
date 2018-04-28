@@ -167,6 +167,7 @@ public:
     Float interpolateV(const Vector3 &v) const { return interpolateV(v.x, v.y, v.z); }
     Float interpolateW(const Vector3 &v) const { return interpolateW(v.x, v.y, v.z); }
 
+    // Velocity at cell center.
     glm::tvec3<Float> velocity(int i, int j, int k) const
     {
         return { Float(0.5) * (m_u.cellSafe(i, j, k) + m_u.cellSafe(i + 1, j, k)),
@@ -187,6 +188,7 @@ public:
         return interpolateVelocity(v.x, v.y, v.z);
     }
 
+    // Divergence at cell center.
     Float divergence(int i, int j, int k) const
     {
         return m_scale * (u(i + 1, j, k) - u(i, j, k) + v(i, j + 1, k) - v(i, j, k) +
