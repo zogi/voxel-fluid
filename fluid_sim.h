@@ -94,6 +94,13 @@ public:
 
     void clear() { m_cells.assign(m_cells.size(), T()); }
 
+    typedef typename std::vector<T>::const_iterator const_iterator;
+    const_iterator begin() const { return m_cells.begin(); }
+    const_iterator end() const { return m_cells.end(); }
+    typedef typename std::vector<T>::iterator iterator;
+    iterator begin() { return m_cells.begin(); }
+    iterator end() { return m_cells.end(); }
+
     size_t indexLinearFromGrid(const GridIndex3 &idx) const
     {
         return idx.x + m_size.x * (idx.y + m_size.y * idx.z);
