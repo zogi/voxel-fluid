@@ -263,6 +263,9 @@ public:
 
     FluidGrid &grid() { return m_grid; }
     Float density() { return m_rho; }
+
+    std::vector<SolidCell> &solidCells() { return m_solid_cells; }
+
     void pressureSolve();
     void pressureUpdate();
 
@@ -286,8 +289,6 @@ public:
     {
         return isFluidCellBoundsChecked(idx.x, idx.y, idx.z);
     }
-
-    std::vector<SolidCell> &solidCells() { return m_solid_cells; }
 
     Float pressure(int i, int j, int k) const
     {
