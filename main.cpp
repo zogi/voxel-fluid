@@ -213,6 +213,17 @@ struct CommonUniforms {
 };
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+struct GridData {
+    glm::vec3 origin;
+    float _pad1;
+    glm::vec3 size;
+    float _pad2;
+    glm::ivec3 grid_dim;
+    int _pad3;
+};
+#pragma pack(pop)
+
 static std::string common_shader_code = R"glsl(
     #version 430
     layout(std140) uniform CommonUniforms {
@@ -238,7 +249,13 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     uniform sampler3D octree_bricks;
     readonly buffer octree_nodes {
         uint array[];
+
+    layout(std140) uniform GridData {
+        vec3 origin;
+        vec3 size;
+        ivec3 grid_dim;
     };
+
     uniform bool dithering_enabled = true;
 
     // PRNG functions. Source: https://thebookofshaders.com/10.
@@ -252,6 +269,11 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         return (rand2(uv, time) + rand2(12.3456*uv, 76.5432*time) - 0.5) / 255.0;
     }
 
+    struct Box {
+        vec3 origin;
+        vec3 size;
+    };
+
     struct Ray {
         vec3 origin;
         vec3 direction;
@@ -261,11 +283,6 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     {
         return ray.origin + t * ray.direction;
     }
-
-    struct Box {
-        vec3 origin;
-        vec3 size;
-    };
 
     // Returns the parameters when the ray enters and exits the box in
     // the first and second component of a vec2 respectively.
@@ -300,8 +317,8 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
 
         // Find the entry and exit points of the octree domain.
         Box bounds;
-        bounds.origin = vec3(0, 0, 0);
-        bounds.size = vec3(1, 1, 1);
+        bounds.origin = origin;
+        bounds.size = size;
 
         // Compute entry and exit point parameters.
         vec2 params = intersectRayBox(ray, bounds);
@@ -328,11 +345,10 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         // Perform 3D DDA traversal.
         float eps = 1e-5;
         ivec3 index_min = ivec3(0, 0, 0);
-        ivec3 index_max = ivec3(4, 4, 4);
-        ivec3 index_entry = ivec3(floor((getRayPos(ray, t_in + eps) - bounds.origin) / bounds.size * index_max));
+        ivec3 index_entry = ivec3(floor((getRayPos(ray, t_in + eps) - bounds.origin) / bounds.size * grid_dim));
         ivec3 index = index_entry;
         Box voxel;
-        voxel.size = bounds.size / index_max;
+        voxel.size = bounds.size / grid_dim;
         voxel.origin = index_entry * voxel.size;
         vec3 transmittance = vec3(1, 1, 1);
         float t = t_in;
@@ -360,7 +376,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
                 index.z += step.z;
                 voxel.origin.z += step.z * voxel.size.z;
             }
-            if (any(lessThan(index, index_min)) || any(greaterThanEqual(index, index_max))) {
+            if (any(lessThan(index, index_min)) || any(greaterThanEqual(index, grid_dim))) {
                 break;
             }
         }
@@ -1330,7 +1346,16 @@ int main()
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GL_CHECK();
 
-    // Set up the octree renderer program.
+    // Set up a buffer for grid data.
+    GLUBO grid_data_ubo = GLUBO::create();
+    constexpr GLuint grid_data_ubo_bind_point = 2;
+    glBindBufferBase(GL_UNIFORM_BUFFER, grid_data_ubo_bind_point, grid_data_ubo);
+    // Allocate storage.
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(GridData), nullptr, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    GL_CHECK();
+
+    // Set up the voxel shader program.
     GLProgram otr_program;
     const GLuint otr_depth_texture_unit = 1;
     GLuint otr_depth_uniform_loc = UINT_MAX; // will be set below.
@@ -1344,6 +1369,12 @@ int main()
         const auto common_ubo_index = glGetUniformBlockIndex(otr_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
             glUniformBlockBinding(otr_program, common_ubo_index, common_ubo_bind_point);
+        GL_CHECK();
+
+        // Grid data.
+        const auto grid_data_ubo_index = glGetUniformBlockIndex(otr_program, "GridData");
+        if (grid_data_ubo_index != GL_INVALID_INDEX)
+            glUniformBlockBinding(otr_program, grid_data_ubo_index, grid_data_ubo_bind_point);
         GL_CHECK();
 
         // Get depth sampler uniform locaction.
@@ -1417,9 +1448,20 @@ int main()
     Console console;
 
     // Init fluid simulator and voxel texture.
+    const auto grid_dim = glm::ivec3(4, 4, 4);
+    GridData grid_data;
+    grid_data.grid_dim = grid_dim;
+    grid_data.origin = glm::vec3(0, 0, 0);
+    grid_data.size = glm::vec3(1, 1, 1);
+    {
+        void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
+        memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
+        glUnmapNamedBuffer(grid_data_ubo);
+        GL_CHECK();
+    }
     const int fluid_fps = 30;
-    const auto fluid_res = sim::GridSize3(10, 10, 10);
-    sim::FluidSim fluid_sim(fluid_res, 1, 1.0f / fluid_fps, 1);
+    sim::FluidSim fluid_sim(grid_dim, 1, 1.0f / fluid_fps, 1);
+
     auto voxels = GLTexture::create();
     glBindTexture(GL_TEXTURE_3D, voxels);
     glTexStorage3D(GL_TEXTURE_3D, 1, GL_R8, fluid_res.x, fluid_res.y, fluid_res.z);
