@@ -68,9 +68,9 @@ public:
 
     T interpolate(Float x, Float y, Float z) const
     {
-        const int i = int(x);
-        const int j = int(y);
-        const int k = int(z);
+        const int i = int(floor(x));
+        const int j = int(floor(y));
+        const int k = int(floor(z));
         const auto alpha_x = x - i;
         const auto v_yz = glm::mix(cellSafe(i, j, k), cellSafe(i + 1, j, k), alpha_x);
         const auto v_Yz = glm::mix(cellSafe(i, j + 1, k), cellSafe(i + 1, j + 1, k), alpha_x);

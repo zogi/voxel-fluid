@@ -230,28 +230,6 @@ TEST(Advect, ExactCellAmount)
     }
 }
 
-TEST(Advect, ZeroFromEmptyCells)
-{
-    typedef sim::MACGrid<double> MACGrid;
-    const double dx = 1.0;
-    const double dt = 1.0;
-    {
-        MACGrid src({ 1, 1, 1 }, dx), dst({ 1, 1, 1 }, dx);
-        src.cell(0, 0, 0) = 42;
-        src.v(0, 0, 0) = -1;
-        src.v(0, 1, 0) = -1;
-        // Other velocity components are zero.
-        advect(src, dt, dst);
-        ASSERT_EQ(dst.cell(0, 0, 0), 0.0);
-        ASSERT_EQ(dst.u(0, 0, 0), 0.0);
-        ASSERT_EQ(dst.u(1, 0, 0), 0.0);
-        ASSERT_EQ(dst.v(0, 0, 0), -1.0);
-        ASSERT_EQ(dst.v(0, 1, 0), -0.5);
-        ASSERT_EQ(dst.w(0, 0, 0), 0.0);
-        ASSERT_EQ(dst.w(0, 0, 1), 0.0);
-    }
-}
-
 namespace {
 double &velocityComponent(sim::MACGrid<double> &mac_grid, int axis, const sim::GridIndex3 &idx)
 {
@@ -263,7 +241,50 @@ double &velocityComponent(sim::MACGrid<double> &mac_grid, int axis, const sim::G
         return mac_grid.w(idx);
     abort();
 }
+sim::GridIndex3 deltaIndex(int axis)
+{
+    auto res = sim::GridIndex3(0);
+    res[axis] = 1;
+    return res;
+}
 } // unnamed namespace
+
+TEST(Advect, ZeroFromEmptyCells)
+{
+    typedef sim::MACGrid<double> MACGrid;
+    const double dx = 1.0;
+    const double dt = 1.0;
+    for (int axis = 0; axis < 3; ++axis) {
+        for (int direction = 0; direction < 2; ++direction) {
+            const auto delta = deltaIndex(axis);
+            MACGrid src({ 1, 1, 1 }, dx), dst({ 1, 1, 1 }, dx);
+            src.cell(0, 0, 0) = 42;
+            const float sign = direction == 0 ? 1.0f : -1.0f;
+            // Velocity components along axis are 1 or -1 (depending on direction).
+            velocityComponent(src, axis, 0 * delta) = sign * 1;
+            velocityComponent(src, axis, 1 * delta) = sign * 1;
+            // Other velocity components are zero.
+
+            advect(src, dt, dst);
+
+            // Previous cell contents should be advected out and replaced by 0.
+            ASSERT_EQ(dst.cell(0, 0, 0), 0.0);
+            // Check if off-axis velocities are still 0.
+            for (int check_axis = 0; check_axis < 3; ++check_axis) {
+                if (check_axis == axis)
+                    continue;
+                const auto check_delta = deltaIndex(check_axis);
+                ASSERT_EQ(velocityComponent(dst, check_axis, 0 * check_delta), 0.0);
+                ASSERT_EQ(velocityComponent(dst, check_axis, 1 * check_delta), 0.0);
+            }
+            // Check if downstream velocity is sign * 1 (advected from upstream),
+            // and the other velocity is interpolated between old sign * 1 and new out-of-grid 0.
+            const int upstream_index = direction;
+            ASSERT_EQ(velocityComponent(dst, axis, upstream_index * delta), sign * 0.5);
+            ASSERT_EQ(velocityComponent(dst, axis, (1 - upstream_index) * delta), sign * 1.0);
+        }
+    }
+}
 
 TEST(Advect, VelocitiesAreAdvected)
 {
@@ -271,8 +292,7 @@ TEST(Advect, VelocitiesAreAdvected)
     const double dx = 1.0;
     const double dt = 1.0;
     for (int axis = 0; axis < 3; ++axis) {
-        sim::GridIndex3 delta = { 0, 0, 0 };
-        delta[axis] = 1;
+        const auto delta = deltaIndex(axis);
         sim::GridSize3 size = sim::GridSize3(1, 1, 1) + 3 * delta;
         MACGrid src(size, dx), dst(size, dx);
 
