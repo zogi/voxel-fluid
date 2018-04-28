@@ -1242,7 +1242,7 @@ static void ShowSettings(bool *p_open)
             ImGui::PopID();
 
             // Voxel extinction intensity.
-            ImGui::PushID(2);
+            ImGui::PushID(3);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("extinction intensity");
             ImGui::NextColumn();
