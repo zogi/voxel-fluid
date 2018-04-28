@@ -42,27 +42,29 @@ public:
         initArray();
     }
 
-    T &cell(int i, int j, int k)
+    T &cell(size_t linear_index) { return m_cells[linear_index]; }
+    const T &cell(size_t linear_index) const { return m_cells[linear_index]; }
+    T &cell(const GridIndex3 &idx)
     {
-        assert(isValid(i, j, k));
-        return m_cells[linearCellIndex(i, j, k)];
+        assert(isValid(idx));
+        return cell(linearCellIndex(idx));
     }
-    const T &cell(int i, int j, int k) const
+    const T &cell(const GridIndex3 &idx) const
     {
-        assert(isValid(i, j, k));
-        return m_cells[linearCellIndex(i, j, k)];
+        assert(isValid(idx));
+        return cell(linearCellIndex(idx));
     }
-    T cellSafe(int i, int j, int k) const
+    T cellSafe(const GridIndex3 &idx) const
     {
-        if (isValid(i, j, k)) {
-            return cell(i, j, k);
+        if (isValid(idx)) {
+            return cell(idx);
         } else {
             return {};
         }
     }
-    T &cell(const GridIndex3 &idx) { return cell(idx.x, idx.y, idx.z); }
-    const T &cell(const GridIndex3 &idx) const { return cell(idx.x, idx.y, idx.z); }
-    T cellSafe(const GridIndex3 &idx) const { return cellSafe(idx.x, idx.y, idx.z); }
+    T &cell(int i, int j, int k) { return cell({ i, j, k }); }
+    const T &cell(int i, int j, int k) const { return cell({ i, j, k }); }
+    T cellSafe(int i, int j, int k) const { return cellSafe({ i, j, k }); }
 
     T interpolate(Float x, Float y, Float z) const
     {
