@@ -523,8 +523,9 @@ struct GUIState {
 
 struct RenderSettings {
     bool dither_voxels = true;
-    glm::vec3 voxel_transmit_color = glm::vec3(0, 0, 0);
-    float voxel_extinction_intensity = 4.0f;
+    glm::vec3 voxel_transmit_color =
+        glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
+    float voxel_extinction_intensity = 70.0f;
     bool visualize_velocity_field = true;
 };
 
@@ -1519,11 +1520,11 @@ int main()
     Console console;
 
     // Init fluid simulator and voxel texture.
-    const auto grid_dim = glm::ivec3(4, 4, 4);
+    const auto grid_dim = glm::ivec3(8, 8, 8);
     GridData grid_data;
     grid_data.grid_dim = grid_dim;
     grid_data.origin = glm::vec3(0, 0, 0);
-    grid_data.size = glm::vec3(1, 1, 1);
+    grid_data.size = glm::vec3(4, 2, 2);
     {
         void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
         memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
@@ -1531,8 +1532,25 @@ int main()
         GL_CHECK();
     }
     const int fluid_fps = 30;
-    sim::FluidSim fluid_sim(grid_dim, 1, 1.0f / fluid_fps, 1);
 
+    const auto center = grid_data.grid_dim / 2 - 1;
+    const auto wall_pos = glm::vec3(0, center.y, center.z);
+    const auto source_pos = glm::vec3(1, center.y, center.z);
+    sim::FluidSim fluid_sim(grid_dim, 1, 1.0f / fluid_fps, 1);
+    fluid_sim.solidCells().emplace_back(wall_pos, glm::vec3(10.0f, 0.0f, 0.0f));
+    {
+        auto &grid = fluid_sim.grid();
+
+        for (int i = 0; i < grid_dim.x; ++i)
+            for (int j = 0; j < grid_dim.y; ++j)
+                for (int k = 0; k < grid_dim.z; ++k)
+                    grid.cell(i, j, k).concentration = 0;
+
+        for (int i = 0; i <= grid_dim.x; ++i)
+            for (int j = 0; j < grid_dim.y; ++j)
+                for (int k = 0; k < grid_dim.z; ++k)
+                    grid.u(i, j, k) = 0; // 10;
+    }
     auto voxels = GLTexture::create();
     glBindTexture(GL_TEXTURE_3D, voxels);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -1696,6 +1714,14 @@ int main()
             const bool do_pressure =
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_pressure_step;
             if (do_advection) {
+                static float time = 0;
+                const float phi = 0.6f;
+                const float angle = 4 * time;
+                fluid_sim.solidCells()[0].u = 16 * cos(phi);
+                fluid_sim.solidCells()[0].v = 16 * sin(phi) * sin(angle);
+                fluid_sim.solidCells()[0].w = 16 * sin(phi) * cos(angle);
+                time += fluid_sim.dt();
+                fluid_sim.grid().cell(source_pos).concentration += fluid_sim.dt() * sim::Float(20);
                 fluid_sim.advect();
             }
             if (do_pressure) {
