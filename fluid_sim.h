@@ -80,7 +80,7 @@ public:
         const auto alpha_z = z - k;
         return glm::mix(v_z, v_Z, alpha_z);
     }
-    T interpolate(const Vector3 v) const { return interpolate(v.x, v.y, v.z); }
+    T interpolate(const Vector3 &v) const { return interpolate(v.x, v.y, v.z); }
 
     GridSize3 size() const { return m_size; }
     size_t cellCount() const { return m_cell_count; }
