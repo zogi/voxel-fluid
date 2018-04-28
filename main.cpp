@@ -246,9 +246,7 @@ static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
     )glsl";
 static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
     uniform sampler2D depth;
-    uniform sampler3D octree_bricks;
-    readonly buffer octree_nodes {
-        uint array[];
+    uniform sampler3D voxels;
 
     layout(std140) uniform GridData {
         vec3 origin;
@@ -298,8 +296,8 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         float t_exit = min(tM.x, min(tM.y, tM.z));
         return vec2(t_enter, t_exit);
     }
-
     uniform vec3 voxel_extinction;
+#if 0
     vec3 getVoxelExtinction(ivec3 index)
     {
         if (length(vec3(index) - vec3(1.5, 1.5, 1.5)) < 2)
@@ -307,6 +305,13 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         else
             return vec3(0, 0, 0);
     }
+#else
+    vec3 getVoxelExtinction(ivec3 index)
+    {
+        float density = texture(voxels, (vec3(index) + vec3(0.5, 0.5, 0.5)) / grid_dim).x;
+        return voxel_extinction * density;
+    }
+#endif
 
     in vec2 uv;
     void main() {
@@ -1464,8 +1469,17 @@ int main()
 
     auto voxels = GLTexture::create();
     glBindTexture(GL_TEXTURE_3D, voxels);
-    glTexStorage3D(GL_TEXTURE_3D, 1, GL_R8, fluid_res.x, fluid_res.y, fluid_res.z);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexStorage3D(GL_TEXTURE_3D, 1, GL_R8, grid_dim.x, grid_dim.y, grid_dim.z);
+    GL_CHECK();
     glBindTexture(GL_TEXTURE_3D, 0);
+    std::vector<uint8_t> voxel_storage(grid_dim.x * grid_dim.y * grid_dim.z);
+    const GLuint otr_voxels_texture_unit = 2;
+    const GLuint otr_voxels_uniform_loc = glGetUniformLocation(otr_program, "voxels");
 
     // Event callbacks.
 
@@ -1563,6 +1577,18 @@ int main()
             camera_ui.tick();
         }
 
+        // Update fluid voxel texture.
+        {
+            for (int i = 0; i < fluid_sim.grid().cellCount(); ++i) {
+                const float c = fluid_sim.grid().cell(i).concentration;
+                voxel_storage[i] = uint8_t(glm::clamp(c, 0.0f, 1.0f) * 255.0);
+            }
+            glTextureSubImage3D(
+                voxels, 0, 0, 0, 0, grid_dim.x, grid_dim.y, grid_dim.z, GL_RED, GL_UNSIGNED_BYTE,
+                voxel_storage.data());
+            GL_CHECK();
+        }
+
         // Draw.
         {
             glBindFramebuffer(GL_FRAMEBUFFER, g_framebuffer.fbo);
@@ -1605,6 +1631,9 @@ int main()
             // Bind depth texture.
             glBindTextureUnit(otr_depth_texture_unit, g_framebuffer.depth_texture);
 
+            // Bind voxel texture.
+            glBindTextureUnit(otr_voxels_texture_unit, voxels);
+
             // Set up multiplicative blending.
             glEnable(GL_BLEND);
             glBlendFunc(GL_ZERO, GL_SRC_COLOR);
@@ -1613,6 +1642,8 @@ int main()
             glUseProgram(otr_program);
             // Set depth texture unit.
             glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
+            // Set voxel texture unit.
+            glUniform1i(otr_voxels_uniform_loc, otr_voxels_texture_unit);
             // Set dithering_enabled uniform.
             {
                 const auto dithering_enabled_uniform_loc =
