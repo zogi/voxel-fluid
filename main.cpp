@@ -2,8 +2,6 @@
 #define FLS_IMPLEMENTATION
 #include "fluid_sim.h"
 
-using namespace glm;
-
 std::shared_ptr<spdlog::logger> g_logger;
 
 // === OpenGL helpers ===
@@ -533,7 +531,7 @@ public:
 private:
     enum { ACTION_NONE, ACTION_ZOOM, ACTION_PAN, ACTION_TUMBLE };
 
-    ivec2 getWindowSize() const
+    glm::ivec2 getWindowSize() const
     {
         if (!mWindow)
             return {};
@@ -542,7 +540,7 @@ private:
         return { w, h };
     }
 
-    vec2 mInitialMousePos;
+    glm::vec2 mInitialMousePos;
     Camera mInitialCam;
     Camera *mCamera;
     float mInitialPivotDistance;
@@ -634,16 +632,17 @@ void CameraUI::cursorPositionCallback(GLFWwindow *window, double xpos, double yp
     mLastAction = action;
 
     const auto initial_forward = mInitialCam.getForwardVector();
-    const auto world_up = vec3(0, 1, 0);
+    const auto world_up = glm::vec3(0, 1, 0);
     const auto window_size = getWindowSize();
 
     if (action == ACTION_ZOOM) { // zooming
         auto mouseDelta = (mousePos.x - mInitialMousePos.x) + (mousePos.y - mInitialMousePos.y);
 
         float newPivotDistance =
-            powf(2.71828183f, 2 * -mouseDelta / length(vec2(window_size))) * mInitialPivotDistance;
-        vec3 oldTarget = mInitialCam.eye_pos + initial_forward * mInitialPivotDistance;
-        vec3 newEye = oldTarget - initial_forward * newPivotDistance;
+            powf(2.71828183f, 2 * -mouseDelta / glm::length(glm::vec2(window_size))) *
+            mInitialPivotDistance;
+        glm::vec3 oldTarget = mInitialCam.eye_pos + initial_forward * mInitialPivotDistance;
+        glm::vec3 newEye = oldTarget - initial_forward * newPivotDistance;
         mCamera->eye_pos = newEye;
         mCamera->pivot_distance = std::max<float>(newPivotDistance, mMinimumPivotDistance);
 
@@ -656,9 +655,9 @@ void CameraUI::cursorPositionCallback(GLFWwindow *window, double xpos, double yp
     } else { // tumbling
         float deltaX = (mousePos.x - mInitialMousePos.x) / -100.0f;
         float deltaY = (mousePos.y - mInitialMousePos.y) / 100.0f;
-        vec3 mW = normalize(initial_forward);
+        glm::vec3 mW = normalize(initial_forward);
 
-        vec3 mU = normalize(cross(world_up, mW));
+        glm::vec3 mU = normalize(cross(world_up, mW));
 
         const bool invertMotion = (mInitialCam.orientation * world_up).y < 0.0f;
         if (invertMotion) {
@@ -710,7 +709,7 @@ void CameraUI::scrollCallback(GLFWwindow *window, double xoffset, double yoffset
     else
         multiplier = powf(-mMouseWheelMultiplier, -increment);
     const auto eye_dir = mCamera->getForwardVector();
-    vec3 newEye = mCamera->eye_pos + eye_dir * (mCamera->pivot_distance * (1 - multiplier));
+    glm::vec3 newEye = mCamera->eye_pos + eye_dir * (mCamera->pivot_distance * (1 - multiplier));
     mCamera->eye_pos = newEye;
     mCamera->pivot_distance =
         std::max<float>(mCamera->pivot_distance * multiplier, mMinimumPivotDistance);
@@ -967,7 +966,7 @@ struct Console {
         const auto usage_str = "[error] camera: invalid arguments\nusage: camera [pos|dir] x y z";
 
         char what[4];
-        vec3 v;
+        glm::vec3 v;
 
         if (sscanf(args, " %4s %f %f %f", what, &v.x, &v.y, &v.z) != 4) {
             AddLog(usage_str);
@@ -1404,7 +1403,7 @@ int main()
 
     // Init camera.
     g_camera.eye_pos = glm::vec3(0, 0, 2);
-    g_camera.orientation = glm::quat_identity<float, highp>();
+    g_camera.orientation = glm::quat_identity<float, glm::highp>();
     static CameraUI camera_ui;
     camera_ui.setWindow(window);
     camera_ui.setCamera(&g_camera);
