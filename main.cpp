@@ -414,6 +414,21 @@ static std::string color_cube_fs_code = common_shader_code + R"glsl(
     }
     )glsl";
 
+static std::string arrow_vs_code = R"glsl(
+    #version 410
+    uniform mat4 mvp;
+    in vec3 pos;
+    void main() {
+        gl_Position = mvp * vec4(pos, 1.0);
+    }
+    )glsl";
+static std::string arrow_fs_code = R"glsl(
+    #version 410
+    uniform vec3 color;
+    void main() {
+        gl_FragColor = vec4(color, 1.0);
+    }
+    )glsl";
 
 // === Cube VAO ===
 
@@ -510,6 +525,7 @@ struct RenderSettings {
     bool dither_voxels = true;
     glm::vec3 voxel_transmit_color = glm::vec3(0, 0, 0);
     float voxel_extinction_intensity = 4.0f;
+    bool visualize_velocity_field = true;
 };
 
 struct SimulationSettings {
@@ -1294,6 +1310,15 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
+            // Visualize velocity field.
+            ImGui::PushID(2);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("visualize velocity field");
+            ImGui::NextColumn();
+            ImGui::Checkbox("", &g_render_settings.visualize_velocity_field);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
             ImGui::TreePop();
         }
         ImGui::PopID();
@@ -1522,6 +1547,52 @@ int main()
     const GLuint otr_voxels_texture_unit = 2;
     const GLuint otr_voxels_uniform_loc = glGetUniformLocation(otr_program, "voxels");
 
+    // Init graphics resources related to fluid sim visualization.
+
+    // Set up a simple program with uniform flat color.
+    GLProgram arrow_program;
+    {
+        std::vector<GLShader> shaders;
+        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, arrow_vs_code.c_str()));
+        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, arrow_fs_code.c_str()));
+        arrow_program = createAndLinkProgram(shaders);
+        GL_CHECK();
+    }
+    const GLuint arrow_program_mvp_loc = glGetUniformLocation(arrow_program, "mvp");
+    const GLuint arrow_program_color_loc = glGetUniformLocation(arrow_program, "color");
+
+    auto arrow_vao = GLVAO::create();
+    {
+        glBindVertexArray(arrow_vao);
+        GLuint arrow_vertex_buffer;
+        glGenBuffers(1, &arrow_vertex_buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, arrow_vertex_buffer);
+        const glm::vec3 arrow_vertices[] = { { 0, 0, 0 },     { 1, 0, 0 }, { 1, 0, 0 },
+                                             { 0.8, 0.1, 0 }, { 1, 0, 0 }, { 0.8, -0.1, 0 } };
+        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+        const auto vpos_location = glGetAttribLocation(arrow_program, "pos");
+        glEnableVertexAttribArray(vpos_location);
+        glVertexAttribPointer(vpos_location, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void *)0);
+        glBindVertexArray(0);
+        GL_CHECK();
+    }
+    const auto drawArrow = [&arrow_vao, &arrow_program, arrow_program_mvp_loc, arrow_program_color_loc](
+                               const glm::vec3 &from, const glm::vec3 &to, const glm::vec3 &color,
+                               const glm::mat4 &view_proj) {
+        glUseProgram(arrow_program);
+        const float scale_factor = glm::length(to - from);
+        const auto rotate = glm::mat4(glm::rotation({ 1, 0, 0 }, (to - from) / scale_factor));
+        const auto scale = glm::scale(glm::vec3(scale_factor, scale_factor, scale_factor));
+        const auto translate = glm::translate(from);
+        const auto model = translate * rotate * scale;
+        const auto mvp = view_proj * model;
+        glUniformMatrix4fv(arrow_program_mvp_loc, 1, GL_FALSE, &mvp[0][0]);
+        glUniform3f(arrow_program_color_loc, color.r, color.g, color.b);
+        glBindVertexArray(arrow_vao);
+        glDrawArrays(GL_LINES, 0, 6);
+        GL_CHECK();
+    };
+
     // Event callbacks.
 
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *, int width, int height) {
@@ -1652,6 +1723,7 @@ int main()
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             // Fill common uniform data.
+            glm::mat4 view_proj;
             {
                 const float aspect_ratio = g_framebuffer.width / (float)g_framebuffer.height;
 
@@ -1670,6 +1742,57 @@ int main()
                 uniforms.cam_nearz = cam_near;
                 uniforms.time = float(glfwGetTime());
                 glUnmapNamedBuffer(common_ubo);
+
+                view_proj = proj * view;
+            }
+
+            // Visualize velocity field.
+            if (g_render_settings.visualize_velocity_field) {
+                const auto dx = fluid_sim.dx();
+                const auto renderFromGrid = grid_data.size / glm::vec3(grid_data.grid_dim);
+                const auto renderFromPhys = renderFromGrid / dx;
+
+                // U.
+                const auto &uGrid = fluid_sim.grid().uGrid();
+                for (int idx = 0; idx < uGrid.cellCount(); ++idx) {
+                    const auto idx3 = uGrid.indexGridFromLinear(idx);
+                    const auto u = uGrid.cell(idx3);
+                    if (std::abs(u) < 1e-1)
+                        continue;
+
+                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0, 0.5, 0.5);
+                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                    const auto length = u * renderFromPhys.x;
+                    drawArrow(pos, pos + glm::vec3(length, 0, 0), glm::vec3(0, 0, 0), view_proj);
+                }
+
+                // V.
+                const auto &vGrid = fluid_sim.grid().vGrid();
+                for (int idx = 0; idx < vGrid.cellCount(); ++idx) {
+                    const auto idx3 = vGrid.indexGridFromLinear(idx);
+                    const auto v = vGrid.cell(idx3);
+                    if (std::abs(v) < 1e-1)
+                        continue;
+
+                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0, 0.5);
+                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                    const auto length = v * renderFromPhys.y;
+                    drawArrow(pos, pos + glm::vec3(0, length, 0), glm::vec3(0, 0, 0), view_proj);
+                }
+
+                // W.
+                const auto &wGrid = fluid_sim.grid().wGrid();
+                for (int idx = 0; idx < wGrid.cellCount(); ++idx) {
+                    const auto idx3 = wGrid.indexGridFromLinear(idx);
+                    const auto w = wGrid.cell(idx3);
+                    if (std::abs(w) < 1e-1)
+                        continue;
+
+                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0.5, 0);
+                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                    const auto length = w * renderFromPhys.z;
+                    drawArrow(pos, pos + glm::vec3(0, 0, length), glm::vec3(0, 0, 0), view_proj);
+                }
             }
 
             // Draw cube.
