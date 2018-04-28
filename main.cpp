@@ -512,11 +512,18 @@ struct RenderSettings {
     float voxel_extinction_intensity = 4.0f;
 };
 
+struct SimulationSettings {
+    bool step_by_step = true;
+    bool do_advection_step = false;
+    bool do_pressure_step = false;
+};
+
 static Framebuffer g_framebuffer;
 static Camera g_camera;
 static float g_time_delta = 0;
 static GUIState g_gui_state;
 static RenderSettings g_render_settings;
+static SimulationSettings g_simulation_settings;
 
 // === Camera controller ===
 
@@ -1257,6 +1264,41 @@ static void ShowSettings(bool *p_open)
         ImGui::PopID();
     }
 
+    // Simulation settings.
+    {
+        ImGui::PushID(1);
+        ImGui::AlignTextToFramePadding();
+        ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
+
+        const bool node_open = ImGui::TreeNode("Object", "Simulation");
+        ImGui::NextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::NextColumn();
+        if (node_open) {
+
+            // Simulate step-by-step.
+            ImGui::PushID(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("step-by-step-animation");
+            ImGui::NextColumn();
+            ImGui::Checkbox("", &g_simulation_settings.step_by_step);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            // Advance simulation by one step.
+            ImGui::PushID(1);
+            ImGui::AlignTextToFramePadding();
+            g_simulation_settings.do_advection_step = ImGui::Button("Advect");
+            ImGui::NextColumn();
+            g_simulation_settings.do_pressure_step = ImGui::Button("Pressure Solve");
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+
     ImGui::Columns(1);
     ImGui::Separator();
     ImGui::PopStyleVar();
@@ -1574,6 +1616,21 @@ int main()
         // Update objects.
         {
             camera_ui.tick();
+        }
+
+        // Update fluid.
+        {
+            const bool do_advection =
+                !g_simulation_settings.step_by_step || g_simulation_settings.do_advection_step;
+            const bool do_pressure =
+                !g_simulation_settings.step_by_step || g_simulation_settings.do_pressure_step;
+            if (do_advection) {
+                fluid_sim.advect();
+            }
+            if (do_pressure) {
+                fluid_sim.pressureSolve();
+                fluid_sim.pressureUpdate();
+            }
         }
 
         // Update fluid voxel texture.
