@@ -216,8 +216,8 @@ private:
 };
 
 struct SmokeData {
-    float temperature;
-    float concentration;
+    Float temperature;
+    Float concentration;
 };
 
 template <typename CellType>
