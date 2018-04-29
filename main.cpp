@@ -1386,8 +1386,10 @@ int main()
     rmt_CreateGlobalInstance(&remotery);
     rmt_BindOpenGL();
     const auto terminate_remotery = finally([remotery]() {
-        rmt_UnbindOpenGL();
-        rmt_DestroyGlobalInstance(remotery);
+        // Unfortunately rmt_UnbindOpenGL hangs if there is no remotry client connected to our
+        // process. See: https://github.com/Celtoys/Remotery/issues/112.
+        // rmt_UnbindOpenGL();
+        // rmt_DestroyGlobalInstance(remotery);
     });
 
     // Enable vsync.
