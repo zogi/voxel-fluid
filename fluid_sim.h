@@ -20,6 +20,12 @@
 #endif
 #endif
 
+#ifdef FLS_USE_REMOTERY
+#include <remotery.h>
+#else
+#define rmt_ScopedCPUSample(name, flags)
+#endif
+
 namespace sim {
 
 #ifdef FLS_USE_DOUBLE
@@ -426,8 +432,12 @@ void FluidSim::advect()
 
 void FluidSim::pressureSolve()
 {
+    rmt_ScopedCPUSample(FluidSim_PressureSolve, 0);
+
     // Set up right hand side.
     const auto setupRHS = [this]() {
+        rmt_ScopedCPUSample(FluidSim_PressureSolve_SetupRHS, 0);
+
         const auto &grid = this->grid();
         FluidCellIndex idx = 0;
         m_cell_neighbors.clear();
@@ -499,69 +509,76 @@ void FluidSim::pressureSolve()
     setupRHS();
 
     // Set up the matrix.
+    {
+        rmt_ScopedCPUSample(FluidSim_PressureSolve_MatrixSetup, 0);
 
-    // Fluid density (TODO: implement variable density solve).
-    const Float rho = density();
-    const Float scale = m_dt / (rho * m_dx * m_dx);
+        // Fluid density (TODO: implement variable density solve).
+        const Float rho = density();
+        const Float scale = m_dt / (rho * m_dx * m_dx);
 
-    const auto fluid_cell_count = m_cell_neighbors.size();
-    m_pressure_rhs.conservativeResize(fluid_cell_count);
-    m_pressure_mtx.resize(fluid_cell_count, fluid_cell_count);
-    m_pressure_mtx.setZero();
+        const auto fluid_cell_count = m_cell_neighbors.size();
+        m_pressure_rhs.conservativeResize(fluid_cell_count);
+        m_pressure_mtx.resize(fluid_cell_count, fluid_cell_count);
+        m_pressure_mtx.setZero();
 
-    // TODO: pre-allocate and fill sparse matrix buffers directly, so this can be parallelized.
-    FluidCellIndex row = 0;
-    for (const auto grid_index : m_fluid_cell_grid_index) {
-        const int i = grid_index.x;
-        const int j = grid_index.y;
-        const int k = grid_index.z;
-        if (!isFluidCell(i, j, k)) {
-            continue;
-        }
-        // Fill this nonzero coeffs of this column in order:
-        // k minus, j minus, i minus, current cell, i plus, j plus, k plus
-        const auto cell_neighbors = m_cell_neighbors[row];
-        if (cell_neighbors.kminus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k - 1);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
-        if (cell_neighbors.jminus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j - 1, k);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
-        if (cell_neighbors.iminus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i - 1, j, k);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
-        {
-            const auto isSolid = [](CellType ct) -> int { return ct == CellType::Solid; };
-            const auto solid_count = isSolid(cell_neighbors.iminus) + isSolid(cell_neighbors.iplus) +
-                                     isSolid(cell_neighbors.jminus) + isSolid(cell_neighbors.jplus) +
-                                     isSolid(cell_neighbors.kminus) + isSolid(cell_neighbors.kplus);
-            const auto nonsolid_count = 6 - solid_count;
-            m_pressure_mtx.insert(row, row) = nonsolid_count * scale;
-        }
-        if (cell_neighbors.iplus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i + 1, j, k);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
-        if (cell_neighbors.jplus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j + 1, k);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
-        if (cell_neighbors.kplus == CellType::Fluid) {
-            const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k + 1);
-            m_pressure_mtx.insert(col, row) = -scale;
-        }
+        // TODO: pre-allocate and fill sparse matrix buffers directly, so this can be parallelized.
+        FluidCellIndex row = 0;
+        for (const auto grid_index : m_fluid_cell_grid_index) {
+            const int i = grid_index.x;
+            const int j = grid_index.y;
+            const int k = grid_index.z;
+            if (!isFluidCell(i, j, k)) {
+                continue;
+            }
+            // Fill this nonzero coeffs of this column in order:
+            // k minus, j minus, i minus, current cell, i plus, j plus, k plus
+            const auto cell_neighbors = m_cell_neighbors[row];
+            if (cell_neighbors.kminus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k - 1);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
+            if (cell_neighbors.jminus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j - 1, k);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
+            if (cell_neighbors.iminus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i - 1, j, k);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
+            {
+                const auto isSolid = [](CellType ct) -> int { return ct == CellType::Solid; };
+                const auto solid_count =
+                    isSolid(cell_neighbors.iminus) + isSolid(cell_neighbors.iplus) +
+                    isSolid(cell_neighbors.jminus) + isSolid(cell_neighbors.jplus) +
+                    isSolid(cell_neighbors.kminus) + isSolid(cell_neighbors.kplus);
+                const auto nonsolid_count = 6 - solid_count;
+                m_pressure_mtx.insert(row, row) = nonsolid_count * scale;
+            }
+            if (cell_neighbors.iplus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i + 1, j, k);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
+            if (cell_neighbors.jplus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j + 1, k);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
+            if (cell_neighbors.kplus == CellType::Fluid) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k + 1);
+                m_pressure_mtx.insert(col, row) = -scale;
+            }
 
-        row += 1;
+            row += 1;
+        }
     }
 
     // Solve for pressure.
-    Solver solver;
-    solver.compute(m_pressure_mtx);
-    m_pressure = solver.solve(m_pressure_rhs);
-    assert(solver.info() == Eigen::ComputationInfo::Success);
+    {
+        rmt_ScopedCPUSample(FluidSim_PressureSolve_Solve, 0);
+
+        Solver solver;
+        solver.compute(m_pressure_mtx);
+        m_pressure = solver.solve(m_pressure_rhs);
+    }
 }
 
 void FluidSim::pressureUpdate()

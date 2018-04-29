@@ -1,6 +1,8 @@
 #include "common.h"
 #define FLS_IMPLEMENTATION
+#define FLS_USE_REMOTERY
 #include "fluid_sim.h"
+#include <remotery.h>
 
 std::shared_ptr<spdlog::logger> g_logger;
 
@@ -1379,6 +1381,15 @@ int main()
         g_logger->info("Using GLEW {}", glewGetString(GLEW_VERSION));
     }
 
+    // Initialize Remotery.
+    Remotery *remotery;
+    rmt_CreateGlobalInstance(&remotery);
+    rmt_BindOpenGL();
+    const auto terminate_remotery = finally([remotery]() {
+        rmt_UnbindOpenGL();
+        rmt_DestroyGlobalInstance(remotery);
+    });
+
     // Enable vsync.
     glfwSwapInterval(1);
     GL_CHECK();
@@ -1709,11 +1720,15 @@ int main()
 
         // Update fluid.
         {
+            rmt_ScopedCPUSample(AppFluidSim, 0);
+
             const bool do_advection =
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_advection_step;
             const bool do_pressure =
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_pressure_step;
             if (do_advection) {
+                rmt_ScopedCPUSample(AppFluidSimAdvect, 0);
+
                 static float time = 0;
                 const float phi = 0.6f;
                 const float angle = 4 * time;
@@ -1725,6 +1740,8 @@ int main()
                 fluid_sim.advect();
             }
             if (do_pressure) {
+                rmt_ScopedCPUSample(AppFluidSimPressureSolve, 0);
+
                 fluid_sim.pressureSolve();
                 fluid_sim.pressureUpdate();
             }
@@ -1732,6 +1749,9 @@ int main()
 
         // Update fluid voxel texture.
         {
+            rmt_ScopedCPUSample(AppFluidVoxelUpdateCPU, 0);
+            rmt_ScopedOpenGLSample(AppFluidVoxelUpdateGL);
+
             for (int i = 0; i < fluid_sim.grid().cellCount(); ++i) {
                 const float c = fluid_sim.grid().cell(i).concentration;
                 voxel_storage[i] = uint8_t(glm::clamp(c, 0.0f, 1.0f) * 255.0);
@@ -1744,6 +1764,8 @@ int main()
 
         // Draw.
         {
+            rmt_ScopedOpenGLSample(AppFrameGL);
+
             glBindFramebuffer(GL_FRAMEBUFFER, g_framebuffer.fbo);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1864,10 +1886,14 @@ int main()
                 glUniform3f(voxel_extinction_uniform_loc, extinction.r, extinction.g, extinction.b);
             }
 
-            // Draw quad.
-            glBindVertexArray(quad_vao);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            GL_CHECK();
+            // Draw fluid volume.
+            {
+                rmt_ScopedOpenGLSample(DrawVolumeGL);
+
+                glBindVertexArray(quad_vao);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                GL_CHECK();
+            }
 
             // Unbind depth texture.
             glBindTextureUnit(otr_depth_texture_unit, 0);
@@ -1894,10 +1920,16 @@ int main()
         }
 
         // Draw GUI.
-        ImGui::Render();
+        {
+            rmt_ScopedOpenGLSample(AppDrawGuiGL);
+            ImGui::Render();
+        }
 
         // Present.
-        glfwSwapBuffers(window);
+        {
+            rmt_ScopedOpenGLSample(AppPresentGL);
+            glfwSwapBuffers(window);
+        }
     }
 
     return 0;
