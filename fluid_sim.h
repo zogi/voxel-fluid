@@ -307,6 +307,8 @@ public:
     }
     Float pressure(const GridIndex3 &idx) const { return pressure(idx.x, idx.y, idx.z); }
 
+    void setSolverMaxIterations(int max_iterations) { m_solver.setMaxIterations(max_iterations); }
+
 private:
     const GridSize3 m_size;
     const Float m_dx, m_dt, m_rho;
@@ -320,6 +322,8 @@ private:
     typedef Eigen::Matrix<SolverFloat, Eigen::Dynamic, 1> SolverVector;
     typedef Eigen::IncompleteCholesky<SolverFloat> Preconditioner;
     typedef Eigen::ConjugateGradient<SolverSparseMatrix, Eigen::Lower | Eigen::Upper, Preconditioner> Solver;
+
+    Solver m_solver;
 
     // Temporary storage for pressure solve.
     typedef uint16_t FluidCellIndex;
@@ -575,9 +579,8 @@ void FluidSim::pressureSolve()
     {
         rmt_ScopedCPUSample(FluidSim_PressureSolve_Solve, 0);
 
-        Solver solver;
-        solver.compute(m_pressure_mtx);
-        m_pressure = solver.solve(m_pressure_rhs);
+        m_solver.compute(m_pressure_mtx);
+        m_pressure = m_solver.solve(m_pressure_rhs);
     }
 }
 
