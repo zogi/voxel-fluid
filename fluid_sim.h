@@ -319,7 +319,7 @@ private:
     std::vector<SolidCell> m_solid_cells;
 
     // New typedef to have the option of running the solver at a higher precision.
-    typedef float SolverFloat;
+    typedef Float SolverFloat;
     typedef Eigen::SparseMatrix<SolverFloat> SolverSparseMatrix;
     typedef Eigen::Matrix<SolverFloat, Eigen::Dynamic, 1> SolverVector;
     typedef Eigen::IncompleteCholesky<SolverFloat> Preconditioner;
