@@ -270,9 +270,9 @@ public:
 
     const FluidGrid &grid() const { return m_grid[m_current_grid]; }
     FluidGrid &grid() { return m_grid[m_current_grid]; }
-    Float density() { return m_rho; }
     Float dx() const { return m_dx; }
     Float dt() const { return m_dt; }
+    Float fluidDensity() const { return m_rho; }
 
     std::vector<SolidCell> &solidCells() { return m_solid_cells; }
 
@@ -517,7 +517,7 @@ void FluidSim::pressureSolve()
         rmt_ScopedCPUSample(FluidSim_PressureSolve_MatrixSetup, 0);
 
         // Fluid density (TODO: implement variable density solve).
-        const Float rho = density();
+        const Float rho = fluidDensity();
         const Float scale = m_dt / (rho * m_dx * m_dx);
 
         const auto fluid_cell_count = m_cell_neighbors.size();
@@ -590,7 +590,7 @@ void FluidSim::pressureUpdate()
 
     // Pressure update.
     // TODO: variable density.
-    const Float rho = density();
+    const Float rho = fluidDensity();
     const Float scale = m_dt / (rho * m_dx);
     for (int idx = 0; idx < m_fluid_cell_grid_index.size(); ++idx) {
         const auto &grid_index = m_fluid_cell_grid_index[idx];
