@@ -1526,8 +1526,13 @@ int main()
     camera_ui.setEnabled(true);
 
     // Init imgui.
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(window, false);
-    const auto terminate_imgui = finally([]() { ImGui_ImplGlfwGL3_Shutdown(); });
+    const auto terminate_imgui = finally([]() {
+        ImGui_ImplGlfwGL3_Shutdown();
+        ImGui::DestroyContext();
+    });
     const auto &imgui_io = ImGui::GetIO();
     ImGui::StyleColorsClassic();
     Console console;
@@ -1633,7 +1638,7 @@ int main()
 
     glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode, int action, int mods) {
         // Imgui.
-        ImGui_ImplGlfwGL3_KeyCallback(window, key, scancode, action, mods);
+        ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
         const auto &io = ImGui::GetIO();
         if (io.WantCaptureKeyboard)
             return;
@@ -1660,7 +1665,7 @@ int main()
 
     glfwSetCharCallback(window, [](GLFWwindow *window, unsigned int codepoint) {
         // Imgui.
-        ImGui_ImplGlfwGL3_CharCallback(window, codepoint);
+        ImGui_ImplGlfw_CharCallback(window, codepoint);
     });
 
     glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) {
@@ -1674,7 +1679,7 @@ int main()
 
     glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) {
         // Imgui.
-        ImGui_ImplGlfwGL3_MouseButtonCallback(window, button, action, mods);
+        ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
         const auto &io = ImGui::GetIO();
         if (io.WantCaptureMouse)
             return;
@@ -1684,7 +1689,7 @@ int main()
 
     glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
         // Imgui.
-        ImGui_ImplGlfwGL3_ScrollCallback(window, xoffset, yoffset);
+        ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
         const auto &io = ImGui::GetIO();
         if (io.WantCaptureMouse)
             return;
@@ -1712,7 +1717,7 @@ int main()
             if (g_gui_state.settings_open)
                 ShowSettings(&g_gui_state.settings_open);
             if (g_gui_state.test_window_open)
-                ImGui::ShowTestWindow(&g_gui_state.test_window_open);
+                ImGui::ShowDemoWindow(&g_gui_state.test_window_open);
         }
 
         // Update objects.
@@ -1925,6 +1930,7 @@ int main()
         {
             rmt_ScopedOpenGLSample(AppDrawGuiGL);
             ImGui::Render();
+            ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
         }
 
         // Present.
