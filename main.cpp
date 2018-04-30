@@ -1275,7 +1275,7 @@ static void ShowSettings(bool *p_open)
             // Simulate step-by-step.
             ImGui::PushID(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("step-by-step-animation");
+            ImGui::Text("simulate step-by-step");
             ImGui::NextColumn();
             ImGui::Checkbox("", &g_simulation_settings.step_by_step);
             ImGui::NextColumn();
@@ -1284,8 +1284,10 @@ static void ShowSettings(bool *p_open)
             // Advance simulation by one step.
             ImGui::PushID(1);
             ImGui::AlignTextToFramePadding();
-            g_simulation_settings.do_advection_step = ImGui::Button("Advect");
+            ImGui::Text("advance simulation");
             ImGui::NextColumn();
+            g_simulation_settings.do_advection_step = ImGui::Button("Advect");
+            ImGui::SameLine();
             g_simulation_settings.do_pressure_step = ImGui::Button("Pressure Solve");
             ImGui::NextColumn();
             ImGui::PopID();
