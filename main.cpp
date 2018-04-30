@@ -225,9 +225,9 @@ struct GridData {
 };
 #pragma pack(pop)
 
-inline uint32_t packGridFlags(bool dithering_enabled)
+inline uint32_t packGridFlags(int8_t density_quantization, bool dithering_enabled)
 {
-    return uint32_t(dithering_enabled);
+    return uint32_t(density_quantization) | (uint32_t(dithering_enabled) << 8);
 }
 
 static std::string common_shader_code = R"glsl(
@@ -262,11 +262,17 @@ static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
         uint grid_flags;
     };
 
-    #define GRID_FLAGS_DITHER_ENABLED_MASK 0x1
+    #define GRID_FLAGS_DENSITY_QUANTIZATION_MASK 0xff
+    #define GRID_FLAGS_DITHER_ENABLED_MASK 0x100
 
     bool ditheringEnabled()
     {
         return (grid_flags & GRID_FLAGS_DITHER_ENABLED_MASK) != 0;
+    }
+
+    int densityQuantization()
+    {
+        return int(grid_flags & GRID_FLAGS_DENSITY_QUANTIZATION_MASK) + 1;
     }
 
     // PRNG functions. Source: https://thebookofshaders.com/10.
@@ -312,7 +318,10 @@ static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
 
     vec3 getVoxelExtinction(ivec3 index)
     {
+        int density_quantization = densityQuantization();
         float density = texture(voxels, (vec3(index) + vec3(0.5, 0.5, 0.5)) / grid_dim).x;
+        density = float(int(density * density_quantization)) / (density_quantization - 1);
+        density = clamp(density, 0, 1);
         return voxel_extinction * density;
     }
 
@@ -529,6 +538,7 @@ struct RenderSettings {
     glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
     bool visualize_velocity_field[3] = { false, false, false };
+    int voxel_density_quantization = 8;
 };
 
 struct SimulationSettings {
@@ -1237,6 +1247,14 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
+            ImGui::PushID(4);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("fluid density quantization");
+            ImGui::NextColumn();
+            ImGui::SliderInt("", &g_render_settings.voxel_density_quantization, 1, 255);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
             ImGui::TreePop();
         }
         ImGui::PopID();
@@ -1851,7 +1869,8 @@ int main()
                 const auto extinction = g_render_settings.voxel_extinction_intensity *
                                         (glm::vec3(1, 1, 1) - g_render_settings.voxel_transmit_color);
                 grid_data.voxel_extinction = extinction;
-                grid_data.grid_flags = packGridFlags(g_render_settings.dither_voxels);
+                grid_data.grid_flags = packGridFlags(
+                    g_render_settings.voxel_density_quantization, g_render_settings.dither_voxels);
 
                 void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
                 memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
