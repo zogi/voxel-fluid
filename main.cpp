@@ -206,25 +206,29 @@ struct CommonUniforms {
     glm::mat4 mvp;
     glm::mat3x4 eye_orientation; // Such that eye_orientation * (0, 0, -1) = eye_dir
     glm::vec3 eye_pos;
-    float _pad1;
-    glm::vec3 eye_dir;
-    float _pad2;
-    glm::vec2 view_size; // 2 * vec2(tan(fov_x/2), tan(fov_y/2))
     float cam_nearz;
+    glm::vec3 eye_dir;
     float time;
+    glm::vec2 view_size; // 2 * vec2(tan(fov_x/2), tan(fov_y/2))
+};
+
+struct GridData {
+    glm::vec3 origin;
+    uint32_t _pad1;
+    glm::vec3 size;
+    uint32_t _pad2;
+    glm::ivec3 grid_dim;
+    uint32_t _pad3;
+
+    glm::vec3 voxel_extinction;
+    uint32_t grid_flags;
 };
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-struct GridData {
-    glm::vec3 origin;
-    float _pad1;
-    glm::vec3 size;
-    float _pad2;
-    glm::ivec3 grid_dim;
-    int _pad3;
-};
-#pragma pack(pop)
+inline uint32_t packGridFlags(bool dithering_enabled)
+{
+    return uint32_t(dithering_enabled);
+}
 
 static std::string common_shader_code = R"glsl(
     #version 430
@@ -232,13 +236,13 @@ static std::string common_shader_code = R"glsl(
         mat4 mvp;
         mat3 eye_orientation;
         vec3 eye_pos;
-        vec3 eye_dir;
-        vec2 view_size;
         float cam_nearz;
+        vec3 eye_dir;
         float time;
+        vec2 view_size;
     };
 )glsl";
-static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
+static std::string voxel_renderer_vs_code = common_shader_code + R"glsl(
     in vec2 pos;
     out vec2 uv;
     void main() {
@@ -246,7 +250,7 @@ static std::string octree_renderer_vs_code = common_shader_code + R"glsl(
         uv = 0.5f * pos + 0.5f;
     }
     )glsl";
-static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
+static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
     uniform sampler2D depth;
     uniform sampler3D voxels;
 
@@ -254,9 +258,16 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         vec3 origin;
         vec3 size;
         ivec3 grid_dim;
+        vec3 voxel_extinction;
+        uint grid_flags;
     };
 
-    uniform bool dithering_enabled = true;
+    #define GRID_FLAGS_DITHER_ENABLED_MASK 0x1
+
+    bool ditheringEnabled()
+    {
+        return (grid_flags & GRID_FLAGS_DITHER_ENABLED_MASK) != 0;
+    }
 
     // PRNG functions. Source: https://thebookofshaders.com/10.
     float rand(float n) { return fract(sin(n) * 43758.5453123); }
@@ -298,22 +309,12 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         float t_exit = min(tM.x, min(tM.y, tM.z));
         return vec2(t_enter, t_exit);
     }
-    uniform vec3 voxel_extinction;
-#if 0
-    vec3 getVoxelExtinction(ivec3 index)
-    {
-        if (length(vec3(index) - vec3(1.5, 1.5, 1.5)) < 2)
-            return voxel_extinction;
-        else
-            return vec3(0, 0, 0);
-    }
-#else
+
     vec3 getVoxelExtinction(ivec3 index)
     {
         float density = texture(voxels, (vec3(index) + vec3(0.5, 0.5, 0.5)) / grid_dim).x;
         return voxel_extinction * density;
     }
-#endif
 
     in vec2 uv;
     void main() {
@@ -322,7 +323,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         vec3 ray_dir_view = vec3(view_size * (uv - 0.5), -1.0);
         ray.direction = normalize(eye_orientation * ray_dir_view);
 
-        // Find the entry and exit points of the octree domain.
+        // Find the entry and exit points of the grid domain.
         Box bounds;
         bounds.origin = origin;
         bounds.size = size;
@@ -337,7 +338,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
             discard;
         }
 
-        // Handle camera inside octree bounds.
+        // Handle camera inside grid bounds.
         float t_near = cam_nearz / dot(eye_dir, ray.direction);
         if (t_in < 0 && t_out > 0) {
             t_in = t_near;
@@ -389,7 +390,7 @@ static std::string octree_renderer_fs_code = common_shader_code + R"glsl(
         }
 
         // Dither.
-        if (dithering_enabled) {
+        if (ditheringEnabled()) {
             float t = fract(time);
             transmittance += vec3(
                 dither(uv, t),
@@ -1410,29 +1411,29 @@ int main()
     GL_CHECK();
 
     // Set up the voxel shader program.
-    GLProgram otr_program;
-    const GLuint otr_depth_texture_unit = 1;
-    GLuint otr_depth_uniform_loc = UINT_MAX; // will be set below.
+    GLProgram vxr_program;
+    const GLuint vxr_depth_texture_unit = 1;
+    GLuint vxr_depth_uniform_loc = UINT_MAX; // will be set below.
     {
         std::vector<GLShader> shaders;
-        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, octree_renderer_vs_code.c_str()));
-        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, octree_renderer_fs_code.c_str()));
-        otr_program = createAndLinkProgram(shaders);
+        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, voxel_renderer_vs_code.c_str()));
+        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, voxel_renderer_fs_code.c_str()));
+        vxr_program = createAndLinkProgram(shaders);
 
         // Common uniforms.
-        const auto common_ubo_index = glGetUniformBlockIndex(otr_program, "CommonUniforms");
+        const auto common_ubo_index = glGetUniformBlockIndex(vxr_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(otr_program, common_ubo_index, common_ubo_bind_point);
+            glUniformBlockBinding(vxr_program, common_ubo_index, common_ubo_bind_point);
         GL_CHECK();
 
         // Grid data.
-        const auto grid_data_ubo_index = glGetUniformBlockIndex(otr_program, "GridData");
+        const auto grid_data_ubo_index = glGetUniformBlockIndex(vxr_program, "GridData");
         if (grid_data_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(otr_program, grid_data_ubo_index, grid_data_ubo_bind_point);
+            glUniformBlockBinding(vxr_program, grid_data_ubo_index, grid_data_ubo_bind_point);
         GL_CHECK();
 
         // Get depth sampler uniform locaction.
-        otr_depth_uniform_loc = glGetUniformLocation(otr_program, "depth");
+        vxr_depth_uniform_loc = glGetUniformLocation(vxr_program, "depth");
         GL_CHECK();
     }
 
@@ -1452,7 +1453,7 @@ int main()
         GL_CHECK();
     }
 
-    // Set up quad vertex data for the octree renderer program.
+    // Set up quad vertex data for the voxel renderer program.
     auto quad_vao = GLVAO::create();
     {
         const glm::vec2 quad_vertices[6] = { { -1.0f, -1.0f }, { 1.0f, 1.0f },   { -1.0f, 1.0f },
@@ -1462,7 +1463,7 @@ int main()
         glGenBuffers(1, &quad_vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, quad_vertex_buffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
-        const auto vpos_location = glGetAttribLocation(otr_program, "pos");
+        const auto vpos_location = glGetAttribLocation(vxr_program, "pos");
         glEnableVertexAttribArray(vpos_location);
         glVertexAttribPointer(vpos_location, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), (void *)0);
         glBindVertexArray(0);
@@ -1514,12 +1515,6 @@ int main()
     grid_data.grid_dim = grid_dim;
     grid_data.origin = glm::vec3(0, 0, 0);
     grid_data.size = glm::vec3(4, 4, 4);
-    {
-        void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
-        memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
-        glUnmapNamedBuffer(grid_data_ubo);
-        GL_CHECK();
-    }
     const int fluid_fps = 30;
 
     const auto center = grid_data.grid_dim / 2 - 1;
@@ -1538,7 +1533,7 @@ int main()
         for (int i = 0; i <= grid_dim.x; ++i)
             for (int j = 0; j < grid_dim.y; ++j)
                 for (int k = 0; k < grid_dim.z; ++k)
-                    grid.u(i, j, k) = 0; // 10;
+                    grid.u(i, j, k) = 0;
     }
     auto voxels = GLTexture::create();
     glBindTexture(GL_TEXTURE_3D, voxels);
@@ -1551,8 +1546,8 @@ int main()
     GL_CHECK();
     glBindTexture(GL_TEXTURE_3D, 0);
     std::vector<uint8_t> voxel_storage(grid_dim.x * grid_dim.y * grid_dim.z);
-    const GLuint otr_voxels_texture_unit = 2;
-    const GLuint otr_voxels_uniform_loc = glGetUniformLocation(otr_program, "voxels");
+    const GLuint vxr_voxels_texture_unit = 2;
+    const GLuint vxr_voxels_uniform_loc = glGetUniformLocation(vxr_program, "voxels");
 
     // Init graphics resources related to fluid sim visualization.
 
@@ -1841,35 +1836,35 @@ int main()
             GL_CHECK();
 
             // Bind depth texture.
-            glBindTextureUnit(otr_depth_texture_unit, g_framebuffer.depth_texture);
+            glBindTextureUnit(vxr_depth_texture_unit, g_framebuffer.depth_texture);
 
             // Bind voxel texture.
-            glBindTextureUnit(otr_voxels_texture_unit, voxels);
+            glBindTextureUnit(vxr_voxels_texture_unit, voxels);
 
             // Set up multiplicative blending.
             glEnable(GL_BLEND);
             glBlendFunc(GL_ZERO, GL_SRC_COLOR);
 
-            // Set up the octree renderer program.
-            glUseProgram(otr_program);
-            // Set depth texture unit.
-            glUniform1i(otr_depth_uniform_loc, otr_depth_texture_unit);
-            // Set voxel texture unit.
-            glUniform1i(otr_voxels_uniform_loc, otr_voxels_texture_unit);
-            // Set dithering_enabled uniform.
+            // Upload voxel data.
             {
-                const auto dithering_enabled_uniform_loc =
-                    glGetUniformLocation(otr_program, "dithering_enabled");
-                glUniform1i(dithering_enabled_uniform_loc, g_render_settings.dither_voxels);
-            }
-            // Set voxel_extinction uniform.
-            {
+
                 const auto extinction = g_render_settings.voxel_extinction_intensity *
                                         (glm::vec3(1, 1, 1) - g_render_settings.voxel_transmit_color);
-                const auto voxel_extinction_uniform_loc =
-                    glGetUniformLocation(otr_program, "voxel_extinction");
-                glUniform3f(voxel_extinction_uniform_loc, extinction.r, extinction.g, extinction.b);
+                grid_data.voxel_extinction = extinction;
+                grid_data.grid_flags = packGridFlags(g_render_settings.dither_voxels);
+
+                void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
+                memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
+                glUnmapNamedBuffer(grid_data_ubo);
+                GL_CHECK();
             }
+
+            // Set up the voxel renderer program.
+            glUseProgram(vxr_program);
+            // Set depth texture unit.
+            glUniform1i(vxr_depth_uniform_loc, vxr_depth_texture_unit);
+            // Set voxel texture unit.
+            glUniform1i(vxr_voxels_uniform_loc, vxr_voxels_texture_unit);
 
             // Draw fluid volume.
             {
@@ -1881,7 +1876,7 @@ int main()
             }
 
             // Unbind depth texture.
-            glBindTextureUnit(otr_depth_texture_unit, 0);
+            glBindTextureUnit(vxr_depth_texture_unit, 0);
 
             // Re-enable and re-attach z buffer.
             glEnable(GL_DEPTH_TEST);
