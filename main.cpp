@@ -525,8 +525,7 @@ struct GUIState {
 
 struct RenderSettings {
     bool dither_voxels = true;
-    glm::vec3 voxel_transmit_color =
-        glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
+    glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
     bool visualize_velocity_field = true;
 };
