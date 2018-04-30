@@ -527,12 +527,14 @@ struct RenderSettings {
     bool dither_voxels = true;
     glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
-    bool visualize_velocity_field = false;
+    bool visualize_velocity_field[3] = { false, false, false };
 };
 
 struct SimulationSettings {
     bool step_by_step = false;
     int max_solver_iterations = 50;
+
+    // For step-by-step simulation.
     bool do_advection_step = false;
     bool do_pressure_step = false;
 };
@@ -1283,7 +1285,11 @@ static void ShowSettings(bool *p_open)
             ImGui::AlignTextToFramePadding();
             ImGui::Text("visualize velocity field");
             ImGui::NextColumn();
-            ImGui::Checkbox("", &g_render_settings.visualize_velocity_field);
+            ImGui::Checkbox("U", &g_render_settings.visualize_velocity_field[0]);
+            ImGui::SameLine();
+            ImGui::Checkbox("V", &g_render_settings.visualize_velocity_field[1]);
+            ImGui::SameLine();
+            ImGui::Checkbox("W", &g_render_settings.visualize_velocity_field[2]);
             ImGui::NextColumn();
             ImGui::PopID();
 
@@ -1768,51 +1774,57 @@ int main()
             }
 
             // Visualize velocity field.
-            if (g_render_settings.visualize_velocity_field) {
+            {
                 const auto dx = fluid_sim.dx();
                 const auto renderFromGrid = grid_data.size / glm::vec3(grid_data.grid_dim);
                 const auto renderFromPhys = renderFromGrid / dx;
 
                 // U.
-                const auto &uGrid = fluid_sim.grid().uGrid();
-                for (int idx = 0; idx < uGrid.cellCount(); ++idx) {
-                    const auto idx3 = uGrid.indexGridFromLinear(idx);
-                    const auto u = uGrid.cell(idx3);
-                    if (std::abs(u) < 1e-1)
-                        continue;
+                if (g_render_settings.visualize_velocity_field[0]) {
+                    const auto &uGrid = fluid_sim.grid().uGrid();
+                    for (int idx = 0; idx < uGrid.cellCount(); ++idx) {
+                        const auto idx3 = uGrid.indexGridFromLinear(idx);
+                        const auto u = uGrid.cell(idx3);
+                        if (std::abs(u) < 1e-1)
+                            continue;
 
-                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0, 0.5, 0.5);
-                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
-                    const auto length = u * renderFromPhys.x;
-                    drawArrow(pos, pos + glm::vec3(length, 0, 0), glm::vec3(0, 0, 0), view_proj);
+                        const auto grid_offset = glm::vec3(idx3) + glm::vec3(0, 0.5, 0.5);
+                        const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                        const auto length = u * renderFromPhys.x;
+                        drawArrow(pos, pos + glm::vec3(length, 0, 0), glm::vec3(0, 0, 0), view_proj);
+                    }
                 }
 
                 // V.
-                const auto &vGrid = fluid_sim.grid().vGrid();
-                for (int idx = 0; idx < vGrid.cellCount(); ++idx) {
-                    const auto idx3 = vGrid.indexGridFromLinear(idx);
-                    const auto v = vGrid.cell(idx3);
-                    if (std::abs(v) < 1e-1)
-                        continue;
+                if (g_render_settings.visualize_velocity_field[1]) {
+                    const auto &vGrid = fluid_sim.grid().vGrid();
+                    for (int idx = 0; idx < vGrid.cellCount(); ++idx) {
+                        const auto idx3 = vGrid.indexGridFromLinear(idx);
+                        const auto v = vGrid.cell(idx3);
+                        if (std::abs(v) < 1e-1)
+                            continue;
 
-                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0, 0.5);
-                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
-                    const auto length = v * renderFromPhys.y;
-                    drawArrow(pos, pos + glm::vec3(0, length, 0), glm::vec3(0, 0, 0), view_proj);
+                        const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0, 0.5);
+                        const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                        const auto length = v * renderFromPhys.y;
+                        drawArrow(pos, pos + glm::vec3(0, length, 0), glm::vec3(0, 0, 0), view_proj);
+                    }
                 }
 
                 // W.
-                const auto &wGrid = fluid_sim.grid().wGrid();
-                for (int idx = 0; idx < wGrid.cellCount(); ++idx) {
-                    const auto idx3 = wGrid.indexGridFromLinear(idx);
-                    const auto w = wGrid.cell(idx3);
-                    if (std::abs(w) < 1e-1)
-                        continue;
+                if (g_render_settings.visualize_velocity_field[2]) {
+                    const auto &wGrid = fluid_sim.grid().wGrid();
+                    for (int idx = 0; idx < wGrid.cellCount(); ++idx) {
+                        const auto idx3 = wGrid.indexGridFromLinear(idx);
+                        const auto w = wGrid.cell(idx3);
+                        if (std::abs(w) < 1e-1)
+                            continue;
 
-                    const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0.5, 0);
-                    const auto pos = grid_data.origin + grid_offset * renderFromGrid;
-                    const auto length = w * renderFromPhys.z;
-                    drawArrow(pos, pos + glm::vec3(0, 0, length), glm::vec3(0, 0, 0), view_proj);
+                        const auto grid_offset = glm::vec3(idx3) + glm::vec3(0.5, 0.5, 0);
+                        const auto pos = grid_data.origin + grid_offset * renderFromGrid;
+                        const auto length = w * renderFromPhys.z;
+                        drawArrow(pos, pos + glm::vec3(0, 0, length), glm::vec3(0, 0, 0), view_proj);
+                    }
                 }
             }
 
