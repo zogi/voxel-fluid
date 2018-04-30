@@ -1489,8 +1489,8 @@ int main()
     }
 
     // Init camera.
-    g_camera.eye_pos = glm::vec3(0, 0, 2);
-    g_camera.orientation = glm::quat_identity<float, glm::highp>();
+    g_camera.eye_pos = glm::vec3(-0.54, 3.28, 3.39);
+    g_camera.orientation = glm::quatLookAt(glm::vec3(0.66, -0.48, -0.58), glm::vec3(0, 1, 0));
     static CameraUI camera_ui;
     camera_ui.setWindow(window);
     camera_ui.setCamera(&g_camera);
@@ -1509,11 +1509,11 @@ int main()
     Console console;
 
     // Init fluid simulator and voxel texture.
-    const auto grid_dim = glm::ivec3(8, 8, 8);
+    const auto grid_dim = glm::ivec3(16, 16, 16);
     GridData grid_data;
     grid_data.grid_dim = grid_dim;
     grid_data.origin = glm::vec3(0, 0, 0);
-    grid_data.size = glm::vec3(4, 2, 2);
+    grid_data.size = glm::vec3(4, 4, 4);
     {
         void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
         memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
@@ -1708,11 +1708,11 @@ int main()
                 rmt_ScopedCPUSample(AppFluidSimAdvect, 0);
 
                 static float time = 0;
-                const float phi = 0.6f;
-                const float angle = 4 * time;
-                fluid_sim.solidCells()[0].u = 16 * cos(phi);
-                fluid_sim.solidCells()[0].v = 16 * sin(phi) * sin(angle);
-                fluid_sim.solidCells()[0].w = 16 * sin(phi) * cos(angle);
+                const float phi = 0.7f;
+                const float angle = 4 * time; // 0.3 * sin(time);
+                fluid_sim.solidCells()[0].u = 30 * cos(phi);
+                fluid_sim.solidCells()[0].v = 30 * sin(phi) * sin(angle);
+                fluid_sim.solidCells()[0].w = 30 * sin(phi) * cos(angle);
                 time += fluid_sim.dt();
                 fluid_sim.grid().cell(source_pos).concentration += fluid_sim.dt() * sim::Float(20);
                 fluid_sim.advect();
