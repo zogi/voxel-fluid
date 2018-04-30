@@ -544,6 +544,7 @@ struct RenderSettings {
 struct SimulationSettings {
     bool step_by_step = false;
     int max_solver_iterations = 50;
+    float fluid_density = 1.0f;
 
     // For step-by-step simulation.
     bool do_advection_step = false;
@@ -1314,6 +1315,15 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
+            // Set max solver iterations.
+            ImGui::PushID(4);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("fluid density");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("", &g_simulation_settings.fluid_density, 0.1f, 10.0f);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
             ImGui::TreePop();
         }
         ImGui::PopID();
@@ -1714,6 +1724,8 @@ int main()
         // Update fluid.
         {
             rmt_ScopedCPUSample(AppFluidSim, 0);
+
+            fluid_sim.setFluidDensity(g_simulation_settings.fluid_density);
 
             const bool do_advection =
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_advection_step;

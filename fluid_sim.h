@@ -273,6 +273,7 @@ public:
     Float dx() const { return m_dx; }
     Float dt() const { return m_dt; }
     Float fluidDensity() const { return m_rho; }
+    void setFluidDensity(Float fluidDensity) { m_rho = std::max(Float(1e-2), fluidDensity); }
 
     std::vector<SolidCell> &solidCells() { return m_solid_cells; }
 
@@ -311,7 +312,8 @@ public:
 
 private:
     const GridSize3 m_size;
-    const Float m_dx, m_dt, m_rho;
+    const Float m_dx, m_dt;
+    Float m_rho;
     FluidGrid m_grid[2];
     int m_current_grid;
     std::vector<SolidCell> m_solid_cells;
