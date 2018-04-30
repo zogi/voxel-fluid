@@ -539,6 +539,8 @@ struct RenderSettings {
     float voxel_extinction_intensity = 70.0f;
     bool visualize_velocity_field[3] = { false, false, false };
     int voxel_density_quantization = 8;
+    glm::vec3 volume_origin = { 0, 0, 0 };
+    glm::vec3 volume_size = { 4, 4, 4 };
 };
 
 struct SimulationSettings {
@@ -1248,11 +1250,29 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
+            // Density quantization.
             ImGui::PushID(4);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("fluid density quantization");
             ImGui::NextColumn();
             ImGui::SliderInt("", &g_render_settings.voxel_density_quantization, 1, 255);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            // Volume extents.
+            ImGui::PushID(5);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("volume origin");
+            ImGui::NextColumn();
+            ImGui::SliderFloat3("", &g_render_settings.volume_origin[0], -4, 4);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            ImGui::PushID(6);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("volume size");
+            ImGui::NextColumn();
+            ImGui::SliderFloat3("", &g_render_settings.volume_size[0], 0.1, 10);
             ImGui::NextColumn();
             ImGui::PopID();
 
@@ -1879,6 +1899,8 @@ int main()
 
             // Upload voxel data.
             {
+                grid_data.origin = g_render_settings.volume_origin;
+                grid_data.size = g_render_settings.volume_size;
 
                 const auto extinction = g_render_settings.voxel_extinction_intensity *
                                         (glm::vec3(1, 1, 1) - g_render_settings.voxel_transmit_color);
