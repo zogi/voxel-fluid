@@ -366,7 +366,7 @@ static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
         ivec3 index = index_entry;
         Box voxel;
         voxel.size = bounds.size / grid_dim;
-        voxel.origin = index_entry * voxel.size;
+        voxel.origin = bounds.origin + index_entry * voxel.size;
         vec3 transmittance = vec3(1, 1, 1);
         float t = t_in;
         ivec3 step = ivec3(sign(ray.direction));
