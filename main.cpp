@@ -527,11 +527,11 @@ struct RenderSettings {
     bool dither_voxels = true;
     glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
-    bool visualize_velocity_field = true;
+    bool visualize_velocity_field = false;
 };
 
 struct SimulationSettings {
-    bool step_by_step = true;
+    bool step_by_step = false;
     int max_solver_iterations = 50;
     bool do_advection_step = false;
     bool do_pressure_step = false;
