@@ -532,6 +532,7 @@ struct RenderSettings {
 
 struct SimulationSettings {
     bool step_by_step = true;
+    int max_solver_iterations = 50;
     bool do_advection_step = false;
     bool do_pressure_step = false;
 };
@@ -1268,8 +1269,17 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
             ImGui::PopID();
 
-            // Visualize velocity field.
+            // Set max solver iterations.
             ImGui::PushID(2);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("max solver iterations");
+            ImGui::NextColumn();
+            ImGui::SliderInt("", &g_simulation_settings.max_solver_iterations, 1, 200);
+            ImGui::NextColumn();
+            ImGui::PopID();
+
+            // Visualize velocity field.
+            ImGui::PushID(3);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("visualize velocity field");
             ImGui::NextColumn();
@@ -1704,6 +1714,7 @@ int main()
             if (do_pressure) {
                 rmt_ScopedCPUSample(AppFluidSimPressureSolve, 0);
 
+                fluid_sim.setSolverMaxIterations(g_simulation_settings.max_solver_iterations);
                 fluid_sim.pressureSolve();
                 fluid_sim.pressureUpdate();
             }
