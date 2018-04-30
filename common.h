@@ -3,7 +3,6 @@
 #define _COMMON_H
 
 #include <imgui.h>
-#include <imgui_tabs.h>
 #include "imgui_impl_glfw_gl3.h"
 
 // spdlog includes windows.h on Windows, which should be included before glfw.

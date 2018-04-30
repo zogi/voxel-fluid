@@ -1176,15 +1176,11 @@ static void ShowSettings(bool *p_open)
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-
-    ImGui::BeginTabBar("Settings#main_tab_bar");
-    ImGui::DrawTabsBackground();
+    ImGui::Columns(2);
+    ImGui::Separator();
 
     // Rendering settings.
-    if (ImGui::AddTab("Rendering")) {
-        ImGui::Columns(2);
-        ImGui::Separator();
-
+    {
         ImGui::PushID(0);
         ImGui::AlignTextToFramePadding();
         ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
@@ -1244,10 +1240,7 @@ static void ShowSettings(bool *p_open)
     }
 
     // Simulation settings.
-    if (ImGui::AddTab("Fluid simulation")) {
-        ImGui::Columns(2);
-        ImGui::Separator();
-
+    {
         ImGui::PushID(1);
         ImGui::AlignTextToFramePadding();
         ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
@@ -1289,8 +1282,6 @@ static void ShowSettings(bool *p_open)
         }
         ImGui::PopID();
     }
-
-    ImGui::EndTabBar();
 
     ImGui::Columns(1);
     ImGui::Separator();

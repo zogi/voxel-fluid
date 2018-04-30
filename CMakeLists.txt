@@ -39,9 +39,8 @@ add_subdirectory(external/glfw)
 
 # imgui
 file(GLOB IMGUI_SRC external/imgui/*.cpp)
-add_library(imgui STATIC ${IMGUI_SRC} external/imgui_tabs/imgui_tabs.cpp)
-target_compile_definitions(imgui PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
-target_include_directories(imgui PUBLIC external/imgui external/imgui_tabs)
+add_library(imgui STATIC ${IMGUI_SRC})
+target_include_directories(imgui PUBLIC external/imgui)
 
 # remotery
 # link against: remotery
