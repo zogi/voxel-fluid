@@ -427,7 +427,7 @@ static std::string color_cube_fs_code = common_shader_code + R"glsl(
     )glsl";
 
 static std::string arrow_vs_code = R"glsl(
-    #version 410
+    #version 430
     uniform mat4 mvp;
     in vec3 pos;
     void main() {
@@ -435,7 +435,7 @@ static std::string arrow_vs_code = R"glsl(
     }
     )glsl";
 static std::string arrow_fs_code = R"glsl(
-    #version 410
+    #version 430
     uniform vec3 color;
     void main() {
         gl_FragColor = vec4(color, 1.0);
