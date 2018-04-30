@@ -342,7 +342,7 @@ static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
         float t_in = params.x;
         float t_out = params.y;
 
-        // Discard if ray misses the octee bounds.
+        // Discard if ray misses the volume bounds.
         if (t_in >= t_out || t_out < 0) {
             discard;
         }
