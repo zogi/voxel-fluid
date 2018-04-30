@@ -243,17 +243,73 @@ struct SolidCell {
     }
 };
 
+class FluidDensityModel {
+public:
+    FluidDensityModel(Float rho) { setConstant(rho); }
+    FluidDensityModel(Float rho_soot_, Float rho_air_, Float temp_air_)
+        : rho_air(rho_air_), rho_soot(rho_soot_), temp_air(temp_air_)
+    {
+        calcAlpha();
+        calcBeta();
+    }
+
+    void setConstant(Float rho)
+    {
+        rho_air = rho;
+        rho_soot = 0;
+        alpha = 0;
+        beta = 0;
+    }
+
+    Float rhoSoot() const { return rho_soot; }
+    void setRhoSoot(Float rho_soot_)
+    {
+        rho_soot = rho_soot_;
+        calcAlpha();
+    }
+
+    Float rhoAir() const { return rho_air; }
+    void setRhoAir(Float rho_air_)
+    {
+        rho_air = rho_air_;
+        calcAlpha();
+    }
+
+    Float tempAir() const { return temp_air; }
+    void setTempAir(Float temp_air_)
+    {
+        temp_air = temp_air_;
+        calcBeta();
+    }
+
+    Float density(const SmokeData &cell) const
+    {
+        const auto temp_delta = cell.temperature - temp_air;
+        const auto density = rho_air * (1 + alpha * cell.concentration - beta * temp_delta);
+        return clampDensity(density);
+    }
+
+    Float clampDensity(Float density) const { return std::max(Float(0.05) * rho_air, density); }
+
+private:
+    Float rho_air, rho_soot, temp_air;
+    Float alpha, beta;
+
+    Float calcAlpha() { alpha = (rho_soot - rho_air) / rho_air; }
+    Float calcBeta() { beta = 1 / temp_air; }
+};
+
 class FluidSim {
 public:
     typedef MACGrid<SmokeData> FluidGrid;
 
     static constexpr int MAX_FLUID_CELL_COUNT = 8192;
 
-    FluidSim(const GridSize3 &size, Float dx, Float dt, Float rho)
+    FluidSim(const GridSize3 &size, Float dx, Float dt, const FluidDensityModel &density_model)
         : m_size(size)
         , m_dx(dx)
         , m_dt(dt)
-        , m_rho(rho)
+        , m_density_model(density_model)
         , m_grid{ { m_size, dx }, { m_size, dx } }
         , m_current_grid(0)
         , m_fluid_cell_linear_index(m_size)
@@ -272,8 +328,8 @@ public:
     FluidGrid &grid() { return m_grid[m_current_grid]; }
     Float dx() const { return m_dx; }
     Float dt() const { return m_dt; }
-    Float fluidDensity() const { return m_rho; }
-    void setFluidDensity(Float fluidDensity) { m_rho = std::max(Float(1e-2), fluidDensity); }
+    const FluidDensityModel &densityModel() const { return m_density_model; }
+    FluidDensityModel &densityModel() { return m_density_model; }
 
     std::vector<SolidCell> &solidCells() { return m_solid_cells; }
 
@@ -313,7 +369,7 @@ public:
 private:
     const GridSize3 m_size;
     const Float m_dx, m_dt;
-    Float m_rho;
+    FluidDensityModel m_density_model;
     FluidGrid m_grid[2];
     int m_current_grid;
     std::vector<SolidCell> m_solid_cells;
@@ -518,9 +574,7 @@ void FluidSim::pressureSolve()
     {
         rmt_ScopedCPUSample(FluidSim_PressureSolve_MatrixSetup, 0);
 
-        // Fluid density (TODO: implement variable density solve).
-        const Float rho = fluidDensity();
-        const Float scale = m_dt / (rho * m_dx * m_dx);
+        const Float scale = m_dt / (m_dx * m_dx);
 
         const auto fluid_cell_count = m_cell_neighbors.size();
         m_pressure_rhs.conservativeResize(fluid_cell_count);
@@ -536,20 +590,26 @@ void FluidSim::pressureSolve()
             if (!isFluidCell(i, j, k)) {
                 continue;
             }
+            const auto density = m_density_model.density(grid().cell(grid_index));
+
+            const auto handleNeighbor = [this, row, scale, density](const GridIndex3 &neighbor_index) {
+                const FluidCellIndex col = m_fluid_cell_linear_index.cell(neighbor_index);
+                const auto neighbor_density = m_density_model.density(grid().cell(neighbor_index));
+                const auto avg_density = Float(0.5) * (density + neighbor_density);
+                m_pressure_mtx.insert(col, row) = -scale / avg_density;
+            };
+
             // Fill this nonzero coeffs of this column in order:
             // k minus, j minus, i minus, current cell, i plus, j plus, k plus
             const auto cell_neighbors = m_cell_neighbors[row];
             if (cell_neighbors.kminus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k - 1);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i, j, k - 1 });
             }
             if (cell_neighbors.jminus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j - 1, k);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i, j - 1, k });
             }
             if (cell_neighbors.iminus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i - 1, j, k);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i - 1, j, k });
             }
             {
                 const auto isSolid = [](CellType ct) -> int { return ct == CellType::Solid; };
@@ -558,19 +618,16 @@ void FluidSim::pressureSolve()
                     isSolid(cell_neighbors.jminus) + isSolid(cell_neighbors.jplus) +
                     isSolid(cell_neighbors.kminus) + isSolid(cell_neighbors.kplus);
                 const auto nonsolid_count = 6 - solid_count;
-                m_pressure_mtx.insert(row, row) = nonsolid_count * scale;
+                m_pressure_mtx.insert(row, row) = nonsolid_count * scale / density;
             }
             if (cell_neighbors.iplus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i + 1, j, k);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i + 1, j, k });
             }
             if (cell_neighbors.jplus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j + 1, k);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i, j + 1, k });
             }
             if (cell_neighbors.kplus == CellType::Fluid) {
-                const FluidCellIndex col = m_fluid_cell_linear_index.cell(i, j, k + 1);
-                m_pressure_mtx.insert(col, row) = -scale;
+                handleNeighbor({ i, j, k + 1 });
             }
 
             row += 1;
@@ -591,21 +648,23 @@ void FluidSim::pressureUpdate()
     auto &grid = this->grid();
 
     // Pressure update.
-    // TODO: variable density.
-    const Float rho = fluidDensity();
-    const Float scale = m_dt / (rho * m_dx);
+    const Float scale = m_dt / m_dx;
     for (int idx = 0; idx < m_fluid_cell_grid_index.size(); ++idx) {
         const auto &grid_index = m_fluid_cell_grid_index[idx];
         const int i = grid_index.x;
         const int j = grid_index.y;
         const int k = grid_index.z;
         const Float p = scale * Float(m_pressure[idx]);
-        grid.u(i, j, k) -= p;
-        grid.u(i + 1, j, k) += p;
-        grid.v(i, j, k) -= p;
-        grid.v(i, j + 1, k) += p;
-        grid.w(i, j, k) -= p;
-        grid.w(i, j, k + 1) += p;
+        const auto density = m_density_model.density(grid.cell(grid_index));
+        const auto avgDensity = [this, density](const GridIndex3 &neighbor) {
+            return Float(0.5) * (density + m_density_model.density(this->grid().cellSafe(neighbor)));
+        };
+        grid.u(i, j, k) -= p / density;
+        grid.u(i + 1, j, k) += p / avgDensity({ i + 1, j, k });
+        grid.v(i, j, k) -= p / density;
+        grid.v(i, j + 1, k) += p / avgDensity({ i, j + 1, k });
+        grid.w(i, j, k) -= p / density;
+        grid.w(i, j, k + 1) += p / avgDensity({ i, j, k + 1 });
     }
     for (const auto solid : m_solid_cells) {
         const int i = solid.i;
