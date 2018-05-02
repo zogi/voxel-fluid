@@ -7,7 +7,6 @@ class FluidConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     options = {}
     requires = (
-        "spdlog/0.13.0@memsharded/stable",
         "gtest/1.8.0@lasote/stable",
     )
     default_options = (

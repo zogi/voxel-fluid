@@ -67,11 +67,17 @@ add_library(eigen INTERFACE)
 target_include_directories(eigen INTERFACE
     ${PROJECT_SOURCE_DIR}/external/eigen)
 
+# spdlog
+# link against: spdlog
+add_library(spdlog INTERFACE)
+target_include_directories(spdlog INTERFACE external/spdlog/include)
+
+# My small fluid simulation library.
 add_library(fluid_sim INTERFACE)
 target_link_libraries(fluid_sim INTERFACE glm eigen)
 
 # Main executable.
-set(LIBS fluid_sim variant imgui remotery glfw glm glad)
+set(LIBS fluid_sim variant imgui remotery spdlog glfw glm glad)
 file(GLOB SRC *.cpp *.h)
 add_executable(fluid ${SRC})
 target_link_libraries(fluid ${CONAN_TARGETS} ${LIBS})
