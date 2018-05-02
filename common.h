@@ -8,7 +8,13 @@
 // spdlog includes windows.h on Windows, which should be included before glfw.
 #include <spdlog/spdlog.h>
 
-#include <GL/glew.h>
+// To prevent glad from including windows.h.
+#if defined(_WIN32) && !defined(APIENTRY)
+#define APIENTRY __stdcall
+#endif
+#include <glad/glad.h>
+#undef APIENTRY
+
 #define GLFW_INCLUDE_GLU
 #include <GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS

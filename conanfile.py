@@ -7,12 +7,10 @@ class FluidConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     options = {}
     requires = (
-        "glew/2.0.0@coding3d/stable",
         "spdlog/0.13.0@memsharded/stable",
         "gtest/1.8.0@lasote/stable",
     )
     default_options = (
-        "glew:shared=False",
         "gtest:shared=False",
     )
     generators = "cmake"

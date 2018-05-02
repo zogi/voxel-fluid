@@ -1395,12 +1395,11 @@ int main()
             abort();
         }
 
-        const auto err = glewInit();
-        if (GLEW_OK != err) {
-            g_logger->critical("GLEW Error: {}", glewGetErrorString(err));
+        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+            g_logger->critical("Failed to initialize OpenGL");
             return 1;
         }
-        g_logger->info("Using GLEW {}", glewGetString(GLEW_VERSION));
+        g_logger->info("OpenGL Version {}.{} loaded", GLVersion.major, GLVersion.minor);
     }
 
     // Initialize Remotery.

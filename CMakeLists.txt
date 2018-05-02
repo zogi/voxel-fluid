@@ -14,6 +14,13 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+# glad
+# link against: glad
+find_package(OpenGL REQUIRED)
+add_library(glad STATIC external/glad/src/glad.c)
+target_include_directories(glad PUBLIC external/glad/include)
+target_link_libraries(glad ${OPENGL_glu_LIBRARY} ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS})
+
 # glm
 # link against: glm
 add_library(glm INTERFACE)
@@ -54,9 +61,6 @@ add_library(variant INTERFACE)
 target_include_directories(variant INTERFACE
     ${PROJECT_SOURCE_DIR}/external/variant/include/mpark)
 
-# OpenGL
-find_package(OpenGL REQUIRED)
-
 # eigen
 # link against: eigen
 add_library(eigen INTERFACE)
@@ -67,7 +71,7 @@ add_library(fluid_sim INTERFACE)
 target_link_libraries(fluid_sim INTERFACE glm eigen)
 
 # Main executable.
-set(LIBS fluid_sim variant imgui remotery glfw glm ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
+set(LIBS fluid_sim variant imgui remotery glfw glm glad)
 file(GLOB SRC *.cpp *.h)
 add_executable(fluid ${SRC})
 target_link_libraries(fluid ${CONAN_TARGETS} ${LIBS})
