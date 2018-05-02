@@ -1272,7 +1272,7 @@ static void ShowSettings(bool *p_open)
             ImGui::AlignTextToFramePadding();
             ImGui::Text("volume size");
             ImGui::NextColumn();
-            ImGui::SliderFloat3("", &g_render_settings.volume_size[0], 0.1, 10);
+            ImGui::SliderFloat3("", &g_render_settings.volume_size[0], 0.1f, 10.0f);
             ImGui::NextColumn();
             ImGui::PopID();
 
