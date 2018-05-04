@@ -551,6 +551,15 @@ struct SimulationSettings {
     // For step-by-step simulation.
     bool do_advection_step = false;
     bool do_pressure_step = false;
+
+    // Fluid grid dimensions.
+    sim::GridSize3 grid_dim = { 16, 16, 16 };
+
+    // Fluid source.
+    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(7, 1, 7), sim::SmokeData(0, 0) };
+
+    // Wall with set velocity.
+    sim::SolidCell wall = { sim::GridIndex3(7, 0, 7), sim::Vector3(0, 1, 0) };
 };
 
 static Framebuffer g_framebuffer;
@@ -1294,16 +1303,13 @@ static void ShowSettings(bool *p_open)
         if (node_open) {
 
             // Simulate step-by-step.
-            ImGui::PushID(0);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("simulate step-by-step");
             ImGui::NextColumn();
-            ImGui::Checkbox("", &g_simulation_settings.step_by_step);
+            ImGui::Checkbox("##step-by-step", &g_simulation_settings.step_by_step);
             ImGui::NextColumn();
-            ImGui::PopID();
 
             // Advance simulation by one step.
-            ImGui::PushID(1);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("advance simulation");
             ImGui::NextColumn();
@@ -1311,19 +1317,15 @@ static void ShowSettings(bool *p_open)
             ImGui::SameLine();
             g_simulation_settings.do_pressure_step = ImGui::Button("Pressure Solve");
             ImGui::NextColumn();
-            ImGui::PopID();
 
             // Set max solver iterations.
-            ImGui::PushID(2);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("max solver iterations");
             ImGui::NextColumn();
-            ImGui::SliderInt("", &g_simulation_settings.max_solver_iterations, 1, 200);
+            ImGui::SliderInt("##max-iter", &g_simulation_settings.max_solver_iterations, 1, 200);
             ImGui::NextColumn();
-            ImGui::PopID();
 
             // Visualize velocity field.
-            ImGui::PushID(3);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("visualize velocity field");
             ImGui::NextColumn();
@@ -1333,16 +1335,73 @@ static void ShowSettings(bool *p_open)
             ImGui::SameLine();
             ImGui::Checkbox("W", &g_render_settings.visualize_velocity_field[2]);
             ImGui::NextColumn();
-            ImGui::PopID();
 
             // Set max solver iterations.
-            ImGui::PushID(4);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("fluid density");
             ImGui::NextColumn();
-            ImGui::SliderFloat("", &g_simulation_settings.fluid_density, 0.1f, 10.0f);
+            ImGui::SliderFloat("##density", &g_simulation_settings.fluid_density, 0.1f, 10.0f);
             ImGui::NextColumn();
-            ImGui::PopID();
+
+            ImGui::Spacing();
+
+            // Fluid source.
+            const auto positionControl = [](const char *label, sim::GridIndex3 &var) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text(label);
+                ImGui::NextColumn();
+                ImGui::InputInt3(fmt::format("##slider-{}", label).c_str(), &var.x);
+                var = glm::max(var, sim::GridIndex3(0));
+                var = glm::min(var, g_simulation_settings.grid_dim - 1);
+                ImGui::NextColumn();
+            };
+
+            positionControl("fluid source position", g_simulation_settings.source.pos);
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("source rate: concetration");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("##source-cc", &g_simulation_settings.source.rate.concentration, 0.0f, 10.0f);
+            ImGui::NextColumn();
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("source rate: temperature");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("##source-temp", &g_simulation_settings.source.rate.temperature, 0.0f, 10.0f);
+            ImGui::NextColumn();
+
+            // Solid wall.
+            positionControl("solid wall position", g_simulation_settings.wall.pos);
+
+            auto &solid_v = g_simulation_settings.wall.velocity;
+            float speed = glm::length(solid_v);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("solid speed");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("##solid-vel-dir", &speed, 0.0f, 10.0f);
+            speed = std::max(speed, 0.0f);
+            ImGui::NextColumn();
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("solid velocity direction");
+            ImGui::NextColumn();
+            {
+                float angles[2];
+                const auto deg_from_rad = [](float rad) { return (rad * 180.0f) / glm::pi<float>(); };
+                const auto rad_from_deg = [](float deg) { return (deg / 180.0f) * glm::pi<float>(); };
+                angles[0] =
+                    deg_from_rad(glm::atan(solid_v.y, length(glm::vec2(solid_v.x, solid_v.z))));
+                angles[1] = deg_from_rad(glm::atan(solid_v.z, solid_v.x));
+
+                ImGui::DragFloat2("##solid-vel-dir", angles);
+
+                angles[0] = rad_from_deg(angles[0]);
+                angles[1] = rad_from_deg(angles[1]);
+                solid_v = { cos(angles[1]) * cos(angles[0]), sin(angles[0]),
+                            sin(angles[1]) * cos(angles[0]) };
+                solid_v *= speed;
+            }
+            ImGui::NextColumn();
 
             ImGui::TreePop();
         }
@@ -1753,14 +1812,22 @@ int main()
             if (do_advection) {
                 rmt_ScopedCPUSample(AppFluidSimAdvect, 0);
 
+                // Track time for animation.
                 static float time = 0;
-                const float phi = 0.7f;
-                const float angle = 4 * time; // 0.3 * sin(time);
-                fluid_sim.solidCells()[0].velocity.x = 30 * cos(phi);
-                fluid_sim.solidCells()[0].velocity.y = 30 * sin(phi) * sin(angle);
-                fluid_sim.solidCells()[0].velocity.z = 30 * sin(phi) * cos(angle);
-                time += fluid_sim.dt();
-                fluid_sim.grid().cell(source_pos).concentration += fluid_sim.dt() * sim::Float(20);
+                const float dt = fluid_sim.dt();
+                time += dt;
+
+                // Wall.
+                fluid_sim.solidCells().at(0) = g_simulation_settings.wall;
+
+                // Source.
+                const auto &source_pos = g_simulation_settings.source.pos;
+                const auto &source_rate = g_simulation_settings.source.rate;
+                auto &source = fluid_sim.grid().cell(source_pos);
+                source.concentration += dt * source_rate.concentration;
+                source.temperature += dt * source_rate.temperature;
+
+                // Advect.
                 fluid_sim.advect();
             }
             if (do_pressure) {
