@@ -1756,9 +1756,9 @@ int main()
                 static float time = 0;
                 const float phi = 0.7f;
                 const float angle = 4 * time; // 0.3 * sin(time);
-                fluid_sim.solidCells()[0].u = 30 * cos(phi);
-                fluid_sim.solidCells()[0].v = 30 * sin(phi) * sin(angle);
-                fluid_sim.solidCells()[0].w = 30 * sin(phi) * cos(angle);
+                fluid_sim.solidCells()[0].velocity.x = 30 * cos(phi);
+                fluid_sim.solidCells()[0].velocity.y = 30 * sin(phi) * sin(angle);
+                fluid_sim.solidCells()[0].velocity.z = 30 * sin(phi) * cos(angle);
                 time += fluid_sim.dt();
                 fluid_sim.grid().cell(source_pos).concentration += fluid_sim.dt() * sim::Float(20);
                 fluid_sim.advect();
