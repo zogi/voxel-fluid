@@ -582,6 +582,11 @@ void FluidSim::pressureSolve()
         m_pressure_mtx.resize(fluid_cell_count, fluid_cell_count);
         m_pressure_mtx.setZero();
 
+        if (fluid_cell_count == 0) {
+            // Nothing to do if there are no fluids.
+            return;
+        }
+
         // TODO: pre-allocate and fill sparse matrix buffers directly, so this can be parallelized.
         FluidCellIndex row = 0;
         for (const auto grid_index : m_fluid_cell_grid_index) {
