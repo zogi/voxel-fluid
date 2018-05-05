@@ -260,7 +260,8 @@ public:
     void setConstant(Float rho)
     {
         rho_air = rho;
-        rho_soot = 0;
+        rho_soot = rho;
+        temp_air = 0;
         alpha = 0;
         beta = 0;
     }
