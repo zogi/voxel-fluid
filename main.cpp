@@ -1359,7 +1359,7 @@ static void ShowSettings(bool *p_open)
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text(label);
                 ImGui::NextColumn();
-                ImGui::InputInt3(fmt::format("##slider-{}", label).c_str(), &var.x);
+                ImGui::DragInt3(fmt::format("##slider-{}", label).c_str(), &var.x);
                 var = glm::max(var, sim::GridIndex3(0));
                 var = glm::min(var, g_simulation_settings.grid_dim - 1);
                 ImGui::NextColumn();
