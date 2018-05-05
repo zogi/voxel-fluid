@@ -534,6 +534,7 @@ struct GUIState {
 };
 
 struct RenderSettings {
+    bool show_spinning_cube = false;
     bool dither_voxels = true;
     glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
@@ -1216,6 +1217,13 @@ static void ShowSettings(bool *p_open)
         ImGui::AlignTextToFramePadding();
         ImGui::NextColumn();
         if (node_open) {
+
+            // Show cube.
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("show opaque object");
+            ImGui::NextColumn();
+            ImGui::Checkbox("##cube", &g_render_settings.show_spinning_cube);
+            ImGui::NextColumn();
 
             // sRGB.
             const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
@@ -1939,11 +1947,13 @@ int main()
                 }
             }
 
-            // Draw cube.
-            glUseProgram(color_cube_program);
-            glBindVertexArray(cube_vao);
-            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, nullptr);
-            GL_CHECK();
+            if (g_render_settings.show_spinning_cube) {
+                // Draw cube.
+                glUseProgram(color_cube_program);
+                glBindVertexArray(cube_vao);
+                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, nullptr);
+                GL_CHECK();
+            }
 
             // Disable and detach z buffer.
             glDisable(GL_DEPTH_TEST);
