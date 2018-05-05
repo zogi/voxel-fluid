@@ -257,6 +257,15 @@ public:
         calcBeta();
     }
 
+    void set(Float rho_soot_, Float rho_air_, Float temp_air_)
+    {
+        rho_soot = rho_soot_;
+        rho_air = rho_air_;
+        temp_air = temp_air_;
+        calcAlpha();
+        calcBeta();
+    }
+
     void setConstant(Float rho)
     {
         rho_air = rho;

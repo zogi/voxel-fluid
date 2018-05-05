@@ -1799,7 +1799,7 @@ int main()
         {
             rmt_ScopedCPUSample(AppFluidSim, 0);
 
-            fluid_sim.densityModel().setConstant(g_simulation_settings.fluid_density);
+            fluid_sim.densityModel().set(g_simulation_settings.fluid_density, 0.1, 0);
 
             const bool do_advection =
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_advection_step;
