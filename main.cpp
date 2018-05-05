@@ -559,7 +559,8 @@ struct SimulationSettings {
     sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(7, 1, 7), sim::SmokeData(0, 0) };
 
     // Wall with set velocity.
-    sim::SolidCell wall = { sim::GridIndex3(7, 0, 7), sim::Vector3(0, 1, 0) };
+    sim::GridIndex3 wall_pos = sim::GridIndex3(7, 0, 7);
+    SphericalCoords<sim::Float> wall_velo_spherical = sphericalFromEuclidean(sim::Vector3(0, 1, 0));
 };
 
 static Framebuffer g_framebuffer;
@@ -1371,35 +1372,30 @@ static void ShowSettings(bool *p_open)
             ImGui::NextColumn();
 
             // Solid wall.
-            positionControl("solid wall position", g_simulation_settings.wall.pos);
+            positionControl("solid wall position", g_simulation_settings.wall_pos);
 
-            auto &solid_v = g_simulation_settings.wall.velocity;
-            float speed = glm::length(solid_v);
+            auto &solid_v = g_simulation_settings.wall_velo_spherical;
             ImGui::AlignTextToFramePadding();
             ImGui::Text("solid speed");
             ImGui::NextColumn();
-            ImGui::SliderFloat("##solid-vel-dir", &speed, 0.0f, 10.0f);
-            speed = std::max(speed, 0.0f);
+            ImGui::SliderFloat("##solid-vel-dir", &solid_v.radius, 0.0f, 10.0f);
+            solid_v.radius = std::max(solid_v.radius, 0.0f);
             ImGui::NextColumn();
 
             ImGui::AlignTextToFramePadding();
             ImGui::Text("solid velocity direction");
             ImGui::NextColumn();
             {
-                float angles[2];
                 const auto deg_from_rad = [](float rad) { return (rad * 180.0f) / glm::pi<float>(); };
                 const auto rad_from_deg = [](float deg) { return (deg / 180.0f) * glm::pi<float>(); };
-                angles[0] =
-                    deg_from_rad(glm::atan(solid_v.y, length(glm::vec2(solid_v.x, solid_v.z))));
-                angles[1] = deg_from_rad(glm::atan(solid_v.z, solid_v.x));
+                float angles[2];
+                angles[0] = deg_from_rad(solid_v.polar);
+                angles[1] = deg_from_rad(solid_v.azimuthal);
 
                 ImGui::DragFloat2("##solid-vel-dir", angles);
 
-                angles[0] = rad_from_deg(angles[0]);
-                angles[1] = rad_from_deg(angles[1]);
-                solid_v = { cos(angles[1]) * cos(angles[0]), sin(angles[0]),
-                            sin(angles[1]) * cos(angles[0]) };
-                solid_v *= speed;
+                solid_v.polar = rad_from_deg(angles[0]);
+                solid_v.azimuthal = rad_from_deg(angles[1]);
             }
             ImGui::NextColumn();
 
@@ -1818,7 +1814,9 @@ int main()
                 time += dt;
 
                 // Wall.
-                fluid_sim.solidCells().at(0) = g_simulation_settings.wall;
+                auto &wall = fluid_sim.solidCells().at(0);
+                wall.pos = g_simulation_settings.wall_pos;
+                wall.velocity = euclideanFromSpherical(g_simulation_settings.wall_velo_spherical);
 
                 // Source.
                 const auto &source_pos = g_simulation_settings.source.pos;

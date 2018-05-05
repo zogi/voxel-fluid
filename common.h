@@ -21,6 +21,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/gtx/polar_coordinates.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/transform.hpp>
 #include <variant.hpp>
@@ -36,5 +37,28 @@
 // Disable warning about strcpy, sprintf and sscanf may be unsafe.
 #pragma warning(disable : 4996)
 #endif
+
+template <typename T>
+struct SphericalCoords {
+    T radius;
+    T polar;
+    T azimuthal;
+};
+template <typename T>
+inline glm::tvec3<T> euclideanFromSpherical(const SphericalCoords<T> &spherical)
+{
+    const auto latitude = glm::half_pi<T>() - spherical.polar;
+    return spherical.radius * glm::euclidean(glm::tvec2<T>(latitude, spherical.azimuthal));
+}
+template <typename T>
+inline SphericalCoords<T> sphericalFromEuclidean(const glm::tvec3<T> &euclidean)
+{
+    const auto glm_polar = glm::polar(euclidean);
+    SphericalCoords<T> res;
+    res.radius = glm::length(euclidean);
+    res.polar = glm::half_pi<T>() - glm_polar.x;
+    res.azimuthal = glm_polar.y;
+    return res;
+}
 
 #endif
