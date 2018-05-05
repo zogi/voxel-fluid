@@ -293,7 +293,11 @@ public:
         return clampDensity(density);
     }
 
-    Float clampDensity(Float density) const { return std::max(Float(0.05) * rho_air, density); }
+    Float clampDensity(Float density) const
+    {
+        const auto min_density = std::max(Float(1e-4), Float(0.05) * rho_air);
+        return std::max(min_density, density);
+    }
 
 private:
     Float rho_air, rho_soot, temp_air;
