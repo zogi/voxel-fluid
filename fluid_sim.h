@@ -304,8 +304,8 @@ private:
     Float rho_air, rho_soot, temp_air;
     Float alpha, beta;
 
-    Float calcAlpha() { alpha = (rho_soot - rho_air) / rho_air; }
-    Float calcBeta() { beta = 1 / temp_air; }
+    void calcAlpha() { alpha = (rho_soot - rho_air) / rho_air; }
+    void calcBeta() { beta = 1 / temp_air; }
 };
 
 class FluidSim {
