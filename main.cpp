@@ -1135,17 +1135,20 @@ static void ShowSettings(bool *p_open)
     ImGui::Columns(2);
     ImGui::Separator();
 
+    const auto newTreeNode = [](const char *label) {
+        ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
+        const bool node_open = ImGui::TreeNode("Object", label);
+        ImGui::NextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::NextColumn();
+        return node_open;
+    };
+
     // Rendering settings.
     {
-        ImGui::PushID(0);
         ImGui::AlignTextToFramePadding();
-        ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
 
-        const bool node_open = ImGui::TreeNode("Object", "Rendering");
-        ImGui::NextColumn();
-        ImGui::AlignTextToFramePadding();
-        ImGui::NextColumn();
-        if (node_open) {
+        if (newTreeNode("Rendering")) {
 
             // Show cube.
             ImGui::AlignTextToFramePadding();
@@ -1156,89 +1159,81 @@ static void ShowSettings(bool *p_open)
 
             // sRGB.
             const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
-            ImGui::PushID(0);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("enable sRGB");
             ImGui::NextColumn();
             bool f = srgb_enabled;
-            ImGui::Checkbox("", &f);
+            ImGui::Checkbox("##srgb", &f);
             if (f && !srgb_enabled) {
                 glEnable(GL_FRAMEBUFFER_SRGB);
             } else if (!f && srgb_enabled) {
                 glDisable(GL_FRAMEBUFFER_SRGB);
             }
             ImGui::NextColumn();
-            ImGui::PopID();
 
-            // Dithering.
-            ImGui::PushID(1);
             ImGui::AlignTextToFramePadding();
             ImGui::Text("enable dithering");
             ImGui::NextColumn();
-            ImGui::Checkbox("", &g_render_settings.dither_voxels);
+            ImGui::Checkbox("##dither", &g_render_settings.dither_voxels);
             ImGui::NextColumn();
-            ImGui::PopID();
 
-            // Voxel extinction color.
-            ImGui::PushID(2);
+            // Reload shaders.
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("transmit color");
             ImGui::NextColumn();
-            ImGui::ColorPicker3("", &g_render_settings.voxel_transmit_color[0]);
+            if (ImGui::Button("Reload shaders")) {
+                reloadShaders();
+            }
             ImGui::NextColumn();
-            ImGui::PopID();
 
-            // Voxel extinction intensity.
-            ImGui::PushID(3);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("extinction intensity");
-            ImGui::NextColumn();
-            ImGui::SliderFloat("", &g_render_settings.voxel_extinction_intensity, 0, 10);
-            ImGui::NextColumn();
-            ImGui::PopID();
 
-            // Density quantization.
-            ImGui::PushID(4);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("fluid density quantization");
-            ImGui::NextColumn();
-            ImGui::SliderInt("", &g_render_settings.voxel_density_quantization, 1, 255);
-            ImGui::NextColumn();
-            ImGui::PopID();
+            if (newTreeNode("Voxel rendering")) {
 
-            // Volume extents.
-            ImGui::PushID(5);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("volume origin");
-            ImGui::NextColumn();
-            ImGui::SliderFloat3("", &g_render_settings.volume_origin[0], -4, 4);
-            ImGui::NextColumn();
-            ImGui::PopID();
+                // Voxel extinction color.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("transmit color");
+                ImGui::NextColumn();
+                ImGui::ColorPicker3("##transmittance", &g_render_settings.voxel_transmit_color[0]);
+                ImGui::NextColumn();
 
-            ImGui::PushID(6);
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("volume size");
-            ImGui::NextColumn();
-            ImGui::SliderFloat3("", &g_render_settings.volume_size[0], 0.1f, 10.0f);
-            ImGui::NextColumn();
-            ImGui::PopID();
+                // Voxel extinction intensity.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("extinction intensity");
+                ImGui::NextColumn();
+                ImGui::SliderFloat("##extinction", &g_render_settings.voxel_extinction_intensity, 0, 10);
+                ImGui::NextColumn();
+
+                // Density quantization.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("fluid density quantization");
+                ImGui::NextColumn();
+                ImGui::SliderInt("##quantizaiton", &g_render_settings.voxel_density_quantization, 1, 255);
+                ImGui::NextColumn();
+
+                // Volume extents.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("volume origin");
+                ImGui::NextColumn();
+                ImGui::SliderFloat3("##origin", &g_render_settings.volume_origin[0], -4, 4);
+                ImGui::NextColumn();
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("volume size");
+                ImGui::NextColumn();
+                ImGui::SliderFloat3("##size", &g_render_settings.volume_size[0], 0.1f, 10.0f);
+                ImGui::NextColumn();
+
+                ImGui::TreePop();
+            }
 
             ImGui::TreePop();
         }
-        ImGui::PopID();
     }
 
     // Simulation settings.
     {
-        ImGui::PushID(1);
         ImGui::AlignTextToFramePadding();
-        ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
 
-        const bool node_open = ImGui::TreeNode("Object", "Simulation");
-        ImGui::NextColumn();
-        ImGui::AlignTextToFramePadding();
-        ImGui::NextColumn();
-        if (node_open) {
+        if (newTreeNode("Simulation")) {
 
             // Simulate step-by-step.
             ImGui::AlignTextToFramePadding();
@@ -1272,9 +1267,11 @@ static void ShowSettings(bool *p_open)
             ImGui::Checkbox("V", &g_render_settings.visualize_velocity_field[1]);
             ImGui::SameLine();
             ImGui::Checkbox("W", &g_render_settings.visualize_velocity_field[2]);
+            ImGui::Spacing();
+            ImGui::SameLine();
             ImGui::NextColumn();
 
-            // Set max solver iterations.
+            // Fluid density.
             ImGui::AlignTextToFramePadding();
             ImGui::Text("fluid density");
             ImGui::NextColumn();
@@ -1283,7 +1280,6 @@ static void ShowSettings(bool *p_open)
 
             ImGui::Spacing();
 
-            // Fluid source.
             const auto positionControl = [](const char *label, sim::GridIndex3 &var) {
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text(label);
@@ -1294,51 +1290,60 @@ static void ShowSettings(bool *p_open)
                 ImGui::NextColumn();
             };
 
-            positionControl("fluid source position", g_simulation_settings.source.pos);
+            // Fluid source.
+            if (newTreeNode("Fluid source")) {
 
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("source rate: concetration");
-            ImGui::NextColumn();
-            ImGui::SliderFloat("##source-cc", &g_simulation_settings.source.rate.concentration, 0.0f, 10.0f);
-            ImGui::NextColumn();
+                positionControl("fluid source position", g_simulation_settings.source.pos);
 
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("source rate: temperature");
-            ImGui::NextColumn();
-            ImGui::SliderFloat("##source-temp", &g_simulation_settings.source.rate.temperature, 0.0f, 10.0f);
-            ImGui::NextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("source rate: concetration");
+                ImGui::NextColumn();
+                ImGui::SliderFloat(
+                    "##source-cc", &g_simulation_settings.source.rate.concentration, 0.0f, 10.0f);
+                ImGui::NextColumn();
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("source rate: temperature");
+                ImGui::NextColumn();
+                ImGui::SliderFloat(
+                    "##source-temp", &g_simulation_settings.source.rate.temperature, 0.0f, 10.0f);
+                ImGui::NextColumn();
+
+                ImGui::TreePop();
+            }
 
             // Solid wall.
-            positionControl("solid wall position", g_simulation_settings.wall_pos);
+            if (newTreeNode("Solid wall")) {
+                positionControl("solid wall position", g_simulation_settings.wall_pos);
 
-            auto &solid_v = g_simulation_settings.wall_velo_spherical;
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("solid speed");
-            ImGui::NextColumn();
-            ImGui::SliderFloat("##solid-vel-dir", &solid_v.radius, 0.0f, 10.0f);
-            solid_v.radius = std::max(solid_v.radius, 0.0f);
-            ImGui::NextColumn();
+                auto &solid_v = g_simulation_settings.wall_velo_spherical;
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("solid speed");
+                ImGui::NextColumn();
+                ImGui::SliderFloat("##solid-vel-dir", &solid_v.radius, 0.0f, 10.0f);
+                solid_v.radius = std::max(solid_v.radius, 0.0f);
+                ImGui::NextColumn();
 
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("solid velocity direction");
-            ImGui::NextColumn();
-            {
-                const auto deg_from_rad = [](float rad) { return (rad * 180.0f) / glm::pi<float>(); };
-                const auto rad_from_deg = [](float deg) { return (deg / 180.0f) * glm::pi<float>(); };
-                float angles[2];
-                angles[0] = deg_from_rad(solid_v.polar);
-                angles[1] = deg_from_rad(solid_v.azimuthal);
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("solid velocity direction");
+                ImGui::NextColumn();
+                {
+                    float angles[2];
+                    angles[0] = glm::degrees(solid_v.polar);
+                    angles[1] = glm::degrees(solid_v.azimuthal);
 
-                ImGui::DragFloat2("##solid-vel-dir", angles);
+                    ImGui::DragFloat2("##solid-vel-dir", angles);
 
-                solid_v.polar = rad_from_deg(angles[0]);
-                solid_v.azimuthal = rad_from_deg(angles[1]);
+                    solid_v.polar = glm::radians(angles[0]);
+                    solid_v.azimuthal = glm::radians(angles[1]);
+                }
+                ImGui::NextColumn();
+
+                ImGui::TreePop();
             }
-            ImGui::NextColumn();
 
             ImGui::TreePop();
         }
-        ImGui::PopID();
     }
 
     ImGui::Columns(1);
