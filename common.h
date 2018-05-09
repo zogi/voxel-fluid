@@ -25,9 +25,11 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/transform.hpp>
 #include <variant.hpp>
+#include <json/json.h>
 
 #include <array>
 #include <bitset>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>

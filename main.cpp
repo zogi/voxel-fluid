@@ -199,6 +199,18 @@ Finally<Func> finally(const Func &func)
     return { func };
 }
 
+typedef std::string Path;
+
+std::string readFileContents(const Path &file_path)
+{
+    std::ifstream ifs(file_path.c_str());
+    if (!ifs) {
+        g_logger->error("readFileContents: {}: cannot open file", file_path);
+        return {};
+    }
+    return std::string(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+}
+
 // === Shaders' codes used by the application ===
 
 #pragma pack(push, 1)
@@ -241,174 +253,6 @@ static std::string common_shader_code = R"glsl(
         float time;
         vec2 view_size;
     };
-)glsl";
-static std::string voxel_renderer_vs_code = common_shader_code + R"glsl(
-    in vec2 pos;
-    out vec2 uv;
-    void main() {
-        gl_Position = vec4(pos, 0.0, 1.0);
-        uv = 0.5f * pos + 0.5f;
-    }
-    )glsl";
-static std::string voxel_renderer_fs_code = common_shader_code + R"glsl(
-    uniform sampler2D depth;
-    uniform sampler3D voxels;
-
-    layout(std140) uniform GridData {
-        vec3 origin;
-        vec3 size;
-        ivec3 grid_dim;
-        vec3 voxel_extinction;
-        uint grid_flags;
-    };
-
-    #define GRID_FLAGS_DENSITY_QUANTIZATION_MASK 0xff
-    #define GRID_FLAGS_DITHER_ENABLED_MASK 0x100
-
-    bool ditheringEnabled()
-    {
-        return (grid_flags & GRID_FLAGS_DITHER_ENABLED_MASK) != 0;
-    }
-
-    int densityQuantization()
-    {
-        return int(grid_flags & GRID_FLAGS_DENSITY_QUANTIZATION_MASK) + 1;
-    }
-
-    // PRNG functions. Source: https://thebookofshaders.com/10.
-    float rand(float n) { return fract(sin(n) * 43758.5453123); }
-    float rand2(vec2 v, float ofs) { return rand(ofs + dot(v, vec2(12.9898,78.233))); }
-
-    // Triangular PDF dither.
-    // Optimal Dither and Noise Shaping in Image Processing, 2008, Cameron Nicklaus Christou.
-    float dither(vec2 uv, float time)
-    {
-        return (rand2(uv, time) + rand2(12.3456*uv, 76.5432*time) - 0.5) / 255.0;
-    }
-
-    struct Box {
-        vec3 origin;
-        vec3 size;
-    };
-
-    struct Ray {
-        vec3 origin;
-        vec3 direction;
-    };
-
-    vec3 getRayPos(Ray ray, float t)
-    {
-        return ray.origin + t * ray.direction;
-    }
-
-    // Returns the parameters when the ray enters and exits the box in
-    // the first and second component of a vec2 respectively.
-    // If the enter parameter is greater than the exit parameter, the ray
-    // misses the box.
-    vec2 intersectRayBox(Ray ray, Box box)
-    {
-        vec3 t0 = (box.origin - ray.origin) / ray.direction;
-        vec3 t1 = (box.origin + box.size - ray.origin) / ray.direction;
-        vec3 tm = min(t0, t1);
-        vec3 tM = max(t0, t1);
-        float t_enter = max(tm.x, max(tm.y, tm.z));
-        float t_exit = min(tM.x, min(tM.y, tM.z));
-        return vec2(t_enter, t_exit);
-    }
-
-    vec3 getVoxelExtinction(ivec3 index)
-    {
-        int density_quantization = densityQuantization();
-        float density = texture(voxels, (vec3(index) + vec3(0.5, 0.5, 0.5)) / grid_dim).x;
-        density = float(int(density * density_quantization)) / (density_quantization - 1);
-        density = clamp(density, 0, 1);
-        return voxel_extinction * density;
-    }
-
-    in vec2 uv;
-    void main() {
-        Ray ray;
-        ray.origin = eye_pos;
-        vec3 ray_dir_view = vec3(view_size * (uv - 0.5), -1.0);
-        ray.direction = normalize(eye_orientation * ray_dir_view);
-
-        // Find the entry and exit points of the grid domain.
-        Box bounds;
-        bounds.origin = origin;
-        bounds.size = size;
-
-        // Compute entry and exit point parameters.
-        vec2 params = intersectRayBox(ray, bounds);
-        float t_in = params.x;
-        float t_out = params.y;
-
-        // Discard if ray misses the volume bounds.
-        if (t_in >= t_out || t_out < 0) {
-            discard;
-        }
-
-        // Handle camera inside grid bounds.
-        float t_near = cam_nearz / dot(eye_dir, ray.direction);
-        if (t_in < 0 && t_out > 0) {
-            t_in = t_near;
-        }
-
-        // Terminate rays using the depth buffer.
-        float depth = texture(depth, uv).x;
-        float t_thresh = t_near / depth;
-        t_in = min(t_in, t_thresh);
-        t_out = min(t_out, t_thresh);
-
-        // Perform 3D DDA traversal.
-        float eps = 1e-5;
-        ivec3 index_min = ivec3(0, 0, 0);
-        ivec3 index_entry = ivec3(floor((getRayPos(ray, t_in + eps) - bounds.origin) / bounds.size * grid_dim));
-        ivec3 index = index_entry;
-        Box voxel;
-        voxel.size = bounds.size / grid_dim;
-        voxel.origin = bounds.origin + index_entry * voxel.size;
-        vec3 transmittance = vec3(1, 1, 1);
-        float t = t_in;
-        ivec3 step = ivec3(sign(ray.direction));
-        for (int i = 0; i < 100; ++i) {
-            vec3 extinction = getVoxelExtinction(index);
-            vec3 t0 = (voxel.origin - ray.origin) / ray.direction;
-            vec3 t1 = (voxel.origin + voxel.size - ray.origin) / ray.direction;
-            vec3 tM = max(t0, t1);
-            float t_exit = min(tM.x, min(tM.y, tM.z));
-            t_exit = min(t_exit, t_out);
-            transmittance *= exp(-extinction * (t_exit - t));
-            t = t_exit;
-            if (t >= t_out)
-                break;
-            if (t_exit == tM.x) {
-                index.x += step.x;
-                voxel.origin.x += step.x * voxel.size.x;
-            }
-            if (t_exit == tM.y) {
-                index.y += step.y;
-                voxel.origin.y += step.y * voxel.size.y;
-            }
-            if (t_exit == tM.z) {
-                index.z += step.z;
-                voxel.origin.z += step.z * voxel.size.z;
-            }
-            if (any(lessThan(index, index_min)) || any(greaterThanEqual(index, grid_dim))) {
-                break;
-            }
-        }
-
-        // Dither.
-        if (ditheringEnabled()) {
-            float t = fract(time);
-            transmittance += vec3(
-                dither(uv, t),
-                dither(uv, t + 100.0),
-                dither(uv, t + 200.0));
-        }
-
-        gl_FragColor = vec4(transmittance, 1.0);
-    }
     )glsl";
 
 static std::string color_cube_vs_code = common_shader_code + R"glsl(
@@ -523,6 +367,91 @@ struct Camera {
 };
 
 glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm::vec3(0, 0, -1)); }
+
+// === Render resources ===
+
+const std::string kResourcesPath = "resource";
+
+struct ShaderResource {
+    GLProgram program;
+    Path path;
+};
+
+void loadShaderResource(ShaderResource &resource)
+{
+    std::ifstream fin(resource.path);
+    if (!fin) {
+        g_logger->error("loadShaderResource: cannot open {}", resource.path);
+        return;
+    }
+    Json::Value root;
+    fin >> root;
+    if (!root) {
+        g_logger->error("loadShaderResource: cannot parse json file {}", resource.path);
+        return;
+    }
+
+    // Verify and collect shader stage entries.
+    constexpr int kShaderTypeCount = 2;
+    std::vector<Path> source_path_lists[kShaderTypeCount];
+
+    GLenum shader_types[kShaderTypeCount] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
+    const char *json_keys[kShaderTypeCount] = { "vertex_shader", "fragment_shader" };
+    for (int i = 0; i < kShaderTypeCount; ++i) {
+        const auto key = json_keys[i];
+        std::vector<Path> &path_list = source_path_lists[i];
+
+        const auto &json_entry = root[key];
+        if (!json_entry) {
+            g_logger->error("loadShaderResource: {}: \"{}\" not found", resource.path, key);
+            return;
+        }
+        if (json_entry.isArray()) {
+            // Push elements in the json array into path_list.
+            path_list.reserve(json_entry.size());
+            for (const auto &elem : json_entry) {
+                if (!elem.isString()) {
+                    g_logger->error(
+                        "loadShaderResource: {}: elements of \"{}\" must be strings strings",
+                        resource.path, key);
+                    return;
+                }
+                path_list.push_back(elem.asString());
+            }
+        } else if (json_entry.isString()) {
+            // Set path_list to contain solely the value of json.
+            path_list.push_back(json_entry.asString());
+        } else {
+            g_logger->error(
+                "loadShaderResource: {}: \"{}\" must be either array or string", resource.path, key);
+            return;
+        }
+    };
+
+    // Load shader sources, then compile and link the shaders.
+    std::vector<GLShader> shaders;
+    for (int i = 0; i < kShaderTypeCount; ++i) {
+        const auto shader_type = shader_types[i];
+        const auto &source_path_list = source_path_lists[i];
+        std::stringstream ss_source;
+        for (const auto &source_path : source_path_list) {
+            ss_source << readFileContents(kResourcesPath + "/" + source_path) << "\n";
+        }
+        shaders.push_back(createAndCompileShader(shader_type, ss_source.str().c_str()));
+    }
+    auto program = createAndLinkProgram(shaders);
+    if (!program) {
+        g_logger->error("loadShaderResource: {}: failed to link shader", resource.path);
+        return;
+    }
+    resource.program = std::move(program);
+}
+
+struct RenderResources {
+    std::vector<ShaderResource> shaders;
+};
+
+static RenderResources g_render_resources;
 
 // === Global State ===
 
@@ -1523,15 +1452,15 @@ int main()
     GL_CHECK();
 
     // Set up the voxel shader program.
-    GLProgram vxr_program;
+    g_render_resources.shaders.emplace_back();
+    ShaderResource &voxel_shader = g_render_resources.shaders.back();
+    voxel_shader.path = kResourcesPath + "/voxel.json";
+    loadShaderResource(voxel_shader);
+    GLProgram &vxr_program = voxel_shader.program;
+
     const GLuint vxr_depth_texture_unit = 1;
     GLuint vxr_depth_uniform_loc = UINT_MAX; // will be set below.
     {
-        std::vector<GLShader> shaders;
-        shaders.push_back(createAndCompileShader(GL_VERTEX_SHADER, voxel_renderer_vs_code.c_str()));
-        shaders.push_back(createAndCompileShader(GL_FRAGMENT_SHADER, voxel_renderer_fs_code.c_str()));
-        vxr_program = createAndLinkProgram(shaders);
-
         // Common uniforms.
         const auto common_ubo_index = glGetUniformBlockIndex(vxr_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)

@@ -1,0 +1,3 @@
+{ "vertex_shader": [ "common.glsl", "voxel.vert" ]
+, "fragment_shader": [ "common.glsl", "voxel.frag" ]
+}
