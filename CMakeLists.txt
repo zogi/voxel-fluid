@@ -15,20 +15,17 @@ if (OPENMP_FOUND)
 endif()
 
 # glad
-# link against: glad
 find_package(OpenGL REQUIRED)
 add_library(glad STATIC external/glad/src/glad.c)
 target_include_directories(glad PUBLIC external/glad/include)
 target_link_libraries(glad ${OPENGL_glu_LIBRARY} ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS})
 
 # glm
-# link against: glm
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
     ${PROJECT_SOURCE_DIR}/external/glm)
 
 # glfw
-# link against: glfw
 # Adding glfw as a submodule since I couldn't find a properly written conan
 # package for glfw which would handle MSVC runtime settings correctly.
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -50,25 +47,21 @@ add_library(imgui STATIC ${IMGUI_SRC})
 target_include_directories(imgui PUBLIC external/imgui)
 
 # remotery
-# link against: remotery
 add_library(remotery STATIC external/remotery/lib/Remotery.c)
 target_include_directories(remotery PUBLIC external/remotery/lib)
 target_compile_definitions(remotery PUBLIC RMT_USE_OPENGL)
 
 # variant
-# link against: variant
 add_library(variant INTERFACE)
 target_include_directories(variant INTERFACE
     ${PROJECT_SOURCE_DIR}/external/variant/include/mpark)
 
 # eigen
-# link against: eigen
 add_library(eigen INTERFACE)
 target_include_directories(eigen INTERFACE
     ${PROJECT_SOURCE_DIR}/external/eigen)
 
 # spdlog
-# link against: spdlog
 add_library(spdlog INTERFACE)
 target_include_directories(spdlog INTERFACE external/spdlog/include)
 
