@@ -445,13 +445,47 @@ void loadShaderResource(ShaderResource &resource)
         return;
     }
     resource.program = std::move(program);
+
+    g_logger->info("loadShaderResource: shader successfully loaded from {}", resource.path);
 }
 
-struct RenderResources {
-    std::vector<ShaderResource> shaders;
+struct VoxelRenderer {
+    ShaderResource shader;
+    GLuint depth_uniform_loc;
 };
 
+struct RenderResources {
+    VoxelRenderer vxr;
+};
+
+const GLuint kCommonUBOBindSlot = 1;
+const GLuint kGridDataUBOBindSlot = 2;
 static RenderResources g_render_resources;
+
+void reloadShaders()
+{
+    // Voxel renderer.
+    {
+        auto &vxr = g_render_resources.vxr;
+        loadShaderResource(vxr.shader);
+
+        // Common uniforms.
+        const auto common_ubo_index = glGetUniformBlockIndex(vxr.shader.program, "CommonUniforms");
+        if (common_ubo_index != GL_INVALID_INDEX)
+            glUniformBlockBinding(vxr.shader.program, common_ubo_index, kCommonUBOBindSlot);
+        GL_CHECK();
+
+        // Grid data.
+        const auto grid_data_ubo_index = glGetUniformBlockIndex(vxr.shader.program, "GridData");
+        if (grid_data_ubo_index != GL_INVALID_INDEX)
+            glUniformBlockBinding(vxr.shader.program, grid_data_ubo_index, kGridDataUBOBindSlot);
+        GL_CHECK();
+
+        // Get depth sampler uniform locaction.
+        vxr.depth_uniform_loc = glGetUniformLocation(vxr.shader.program, "depth");
+        GL_CHECK();
+    }
+}
 
 // === Global State ===
 
@@ -1440,8 +1474,7 @@ int main()
 
     // Set up a buffer for common uniforms.
     GLUBO common_ubo = GLUBO::create();
-    constexpr GLuint common_ubo_bind_point = 1;
-    glBindBufferBase(GL_UNIFORM_BUFFER, common_ubo_bind_point, common_ubo);
+    glBindBufferBase(GL_UNIFORM_BUFFER, kCommonUBOBindSlot, common_ubo);
     // Allocate storage.
     glBufferData(GL_UNIFORM_BUFFER, sizeof(CommonUniforms), nullptr, GL_STATIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -1449,39 +1482,19 @@ int main()
 
     // Set up a buffer for grid data.
     GLUBO grid_data_ubo = GLUBO::create();
-    constexpr GLuint grid_data_ubo_bind_point = 2;
-    glBindBufferBase(GL_UNIFORM_BUFFER, grid_data_ubo_bind_point, grid_data_ubo);
+    glBindBufferBase(GL_UNIFORM_BUFFER, kGridDataUBOBindSlot, grid_data_ubo);
     // Allocate storage.
     glBufferData(GL_UNIFORM_BUFFER, sizeof(GridData), nullptr, GL_STATIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GL_CHECK();
 
     // Set up the voxel shader program.
-    g_render_resources.shaders.emplace_back();
-    ShaderResource &voxel_shader = g_render_resources.shaders.back();
-    voxel_shader.path = kResourcesPath + "/voxel.json";
-    loadShaderResource(voxel_shader);
-    GLProgram &vxr_program = voxel_shader.program;
-
+    auto &vxr = g_render_resources.vxr;
+    vxr.shader.path = kResourcesPath + "/voxel.json";
+    reloadShaders();
+    GLProgram &vxr_program = vxr.shader.program;
+    const GLuint &vxr_depth_uniform_loc = vxr.depth_uniform_loc;
     const GLuint vxr_depth_texture_unit = 1;
-    GLuint vxr_depth_uniform_loc = UINT_MAX; // will be set below.
-    {
-        // Common uniforms.
-        const auto common_ubo_index = glGetUniformBlockIndex(vxr_program, "CommonUniforms");
-        if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(vxr_program, common_ubo_index, common_ubo_bind_point);
-        GL_CHECK();
-
-        // Grid data.
-        const auto grid_data_ubo_index = glGetUniformBlockIndex(vxr_program, "GridData");
-        if (grid_data_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(vxr_program, grid_data_ubo_index, grid_data_ubo_bind_point);
-        GL_CHECK();
-
-        // Get depth sampler uniform locaction.
-        vxr_depth_uniform_loc = glGetUniformLocation(vxr_program, "depth");
-        GL_CHECK();
-    }
 
     // Set up the program to draw the colorful cube.
     GLProgram color_cube_program;
@@ -1495,7 +1508,7 @@ int main()
         // Common uniforms.
         auto common_ubo_index = glGetUniformBlockIndex(color_cube_program, "CommonUniforms");
         if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(color_cube_program, common_ubo_index, common_ubo_bind_point);
+            glUniformBlockBinding(color_cube_program, common_ubo_index, kCommonUBOBindSlot);
         GL_CHECK();
     }
 
