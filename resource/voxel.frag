@@ -1,7 +1,7 @@
 uniform sampler2D depth;
 uniform sampler3D voxels;
 
-layout(std140) uniform GridData {
+layout(std140, binding=2) uniform GridData {
     vec3 origin;
     vec3 size;
     ivec3 grid_dim;

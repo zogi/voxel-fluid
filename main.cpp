@@ -372,23 +372,18 @@ glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm
 
 const std::string kResourcesPath = "resource";
 
-struct ShaderResource {
-    GLProgram program;
-    Path path;
-};
-
-void loadShaderResource(ShaderResource &resource)
+GLProgram loadShader(const std::string &json_path)
 {
-    std::ifstream fin(resource.path);
+    std::ifstream fin(json_path);
     if (!fin) {
-        g_logger->error("loadShaderResource: cannot open {}", resource.path);
-        return;
+        g_logger->error("loadShaderResource: cannot open {}", json_path);
+        return {};
     }
     Json::Value root;
     fin >> root;
     if (!root) {
-        g_logger->error("loadShaderResource: cannot parse json file {}", resource.path);
-        return;
+        g_logger->error("loadShaderResource: cannot parse json file {}", json_path);
+        return {};
     }
 
     // Verify and collect shader stage entries.
@@ -403,8 +398,8 @@ void loadShaderResource(ShaderResource &resource)
 
         const auto &json_entry = root[key];
         if (!json_entry) {
-            g_logger->error("loadShaderResource: {}: \"{}\" not found", resource.path, key);
-            return;
+            g_logger->error("loadShaderResource: {}: \"{}\" not found", json_path, key);
+            return {};
         }
         if (json_entry.isArray()) {
             // Push elements in the json array into path_list.
@@ -413,8 +408,8 @@ void loadShaderResource(ShaderResource &resource)
                 if (!elem.isString()) {
                     g_logger->error(
                         "loadShaderResource: {}: elements of \"{}\" must be strings strings",
-                        resource.path, key);
-                    return;
+                        json_path, key);
+                    return {};
                 }
                 path_list.push_back(elem.asString());
             }
@@ -422,9 +417,8 @@ void loadShaderResource(ShaderResource &resource)
             // Set path_list to contain solely the value of json.
             path_list.push_back(json_entry.asString());
         } else {
-            g_logger->error(
-                "loadShaderResource: {}: \"{}\" must be either array or string", resource.path, key);
-            return;
+            g_logger->error("loadShaderResource: {}: \"{}\" must be either array or string", json_path, key);
+            return {};
         }
     };
 
@@ -441,17 +435,22 @@ void loadShaderResource(ShaderResource &resource)
     }
     auto program = createAndLinkProgram(shaders);
     if (!program) {
-        g_logger->error("loadShaderResource: {}: failed to link shader", resource.path);
-        return;
+        g_logger->error("loadShaderResource: {}: failed to link shader", json_path);
+        return {};
     }
-    resource.program = std::move(program);
-
-    g_logger->info("loadShaderResource: shader successfully loaded from {}", resource.path);
+    g_logger->info("loadShaderResource: shader successfully loaded from {}", json_path);
+    return program;
 }
+
+struct ShaderResource {
+    GLProgram program;
+    Path path;
+};
 
 struct VoxelRenderer {
     ShaderResource shader;
-    GLuint depth_uniform_loc;
+    GLuint depth_uniform_loc = 0;
+    GLuint grid_data_binding = 0;
 };
 
 struct RenderResources {
@@ -459,33 +458,52 @@ struct RenderResources {
 };
 
 const GLuint kCommonUBOBindSlot = 1;
-const GLuint kGridDataUBOBindSlot = 2;
 static RenderResources g_render_resources;
 
-void reloadShaders()
+void loadVoxelShader()
 {
-    // Voxel renderer.
-    {
-        auto &vxr = g_render_resources.vxr;
-        loadShaderResource(vxr.shader);
+    auto vxr_program = loadShader(g_render_resources.vxr.shader.path);
+    if (!vxr_program)
+        return;
 
-        // Common uniforms.
-        const auto common_ubo_index = glGetUniformBlockIndex(vxr.shader.program, "CommonUniforms");
-        if (common_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(vxr.shader.program, common_ubo_index, kCommonUBOBindSlot);
-        GL_CHECK();
-
-        // Grid data.
-        const auto grid_data_ubo_index = glGetUniformBlockIndex(vxr.shader.program, "GridData");
-        if (grid_data_ubo_index != GL_INVALID_INDEX)
-            glUniformBlockBinding(vxr.shader.program, grid_data_ubo_index, kGridDataUBOBindSlot);
-        GL_CHECK();
-
-        // Get depth sampler uniform locaction.
-        vxr.depth_uniform_loc = glGetUniformLocation(vxr.shader.program, "depth");
-        GL_CHECK();
+    // Common uniforms.
+    const auto common_ubo_index = glGetUniformBlockIndex(vxr_program, "CommonUniforms");
+    if (common_ubo_index == GL_INVALID_INDEX) {
+        g_logger->error("loadVoxelShader: no CommonUniforms UBO defined in the voxel shader.");
+        return;
     }
+    glUniformBlockBinding(vxr_program, common_ubo_index, kCommonUBOBindSlot);
+    GL_CHECK();
+
+    // Grid data.
+    const auto grid_ubo_index = glGetUniformBlockIndex(vxr_program, "GridData");
+    if (grid_ubo_index == GL_INVALID_INDEX) {
+        g_logger->error("loadVoxelShader: no GridData UBO defined in the voxel shader.");
+        return;
+    }
+    GLint grid_ubo_binding = 0;
+    glGetActiveUniformBlockiv(vxr_program, grid_ubo_index, GL_UNIFORM_BLOCK_BINDING, &grid_ubo_binding);
+    if (grid_ubo_binding == 0) {
+        grid_ubo_binding = 2;
+        glUniformBlockBinding(vxr_program, grid_ubo_index, grid_ubo_binding);
+        g_logger->warn(
+            "loadVoxelShader: no binding specified for GridData UBO in the voxel shader. Trying "
+            "fallback index {}.",
+            grid_ubo_binding);
+    }
+    GL_CHECK();
+
+    // Get depth sampler uniform locaction.
+    const auto depth_uniform_loc = glGetUniformLocation(vxr_program, "depth");
+    GL_CHECK();
+
+    auto &vxr = g_render_resources.vxr;
+    vxr.depth_uniform_loc = depth_uniform_loc;
+    vxr.grid_data_binding = grid_ubo_binding;
+    vxr.shader.program = std::move(vxr_program);
 }
+
+void reloadShaders() { loadVoxelShader(); }
 
 // === Global State ===
 
@@ -1480,14 +1498,6 @@ int main()
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GL_CHECK();
 
-    // Set up a buffer for grid data.
-    GLUBO grid_data_ubo = GLUBO::create();
-    glBindBufferBase(GL_UNIFORM_BUFFER, kGridDataUBOBindSlot, grid_data_ubo);
-    // Allocate storage.
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(GridData), nullptr, GL_STATIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    GL_CHECK();
-
     // Set up the voxel shader program.
     auto &vxr = g_render_resources.vxr;
     vxr.shader.path = kResourcesPath + "/voxel.json";
@@ -1495,6 +1505,14 @@ int main()
     GLProgram &vxr_program = vxr.shader.program;
     const GLuint &vxr_depth_uniform_loc = vxr.depth_uniform_loc;
     const GLuint vxr_depth_texture_unit = 1;
+
+    // Set up a buffer for grid data.
+    GLUBO grid_data_ubo = GLUBO::create();
+    glBindBufferBase(GL_UNIFORM_BUFFER, vxr.grid_data_binding, grid_data_ubo);
+    // Allocate storage.
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(GridData), nullptr, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    GL_CHECK();
 
     // Set up the program to draw the colorful cube.
     GLProgram color_cube_program;
