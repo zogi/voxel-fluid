@@ -75,8 +75,10 @@ target_link_libraries(fluid_sim INTERFACE glm eigen)
 
 # Main executable.
 set(LIBS fluid_sim variant jsoncpp imgui remotery spdlog glfw glm glad)
+file(GLOB SHADER shader/*)
 file(GLOB SRC *.cpp *.h)
-add_executable(fluid ${SRC})
+source_group(shader FILES ${SHADER})
+add_executable(fluid ${SRC} ${SHADER})
 target_link_libraries(fluid ${CONAN_TARGETS} ${LIBS})
 
 # Unit tests.

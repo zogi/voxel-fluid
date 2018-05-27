@@ -370,7 +370,7 @@ glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm
 
 // === Render resources ===
 
-const std::string kResourcesPath = "resource";
+const std::string kShadersPath = "shader";
 
 GLProgram loadShader(const std::string &json_path)
 {
@@ -429,7 +429,7 @@ GLProgram loadShader(const std::string &json_path)
         const auto &source_path_list = source_path_lists[i];
         std::stringstream ss_source;
         for (const auto &source_path : source_path_list) {
-            ss_source << readFileContents(kResourcesPath + "/" + source_path) << "\n";
+            ss_source << readFileContents(kShadersPath + "/" + source_path) << "\n";
         }
         shaders.push_back(createAndCompileShader(shader_type, ss_source.str().c_str()));
     }
@@ -1500,7 +1500,7 @@ int main()
 
     // Set up the voxel shader program.
     auto &vxr = g_render_resources.vxr;
-    vxr.shader.path = kResourcesPath + "/voxel.json";
+    vxr.shader.path = kShadersPath + "/voxel.json";
     reloadShaders();
     GLProgram &vxr_program = vxr.shader.program;
     const GLuint &vxr_depth_uniform_loc = vxr.depth_uniform_loc;
