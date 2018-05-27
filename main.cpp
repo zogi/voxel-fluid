@@ -520,10 +520,13 @@ struct RenderSettings {
     glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
     float voxel_extinction_intensity = 70.0f;
     bool visualize_velocity_field[3] = { false, false, false };
-    int voxel_density_quantization = 8;
+    int voxel_density_quantization = 16;
     glm::vec3 volume_origin = { 0, 0, 0 };
     glm::vec3 volume_size = { 4, 4, 4 };
 };
+
+const float kInitialEmissionRate = 25.0f;
+const float kInitialEmissionSpeed = 30.0f;
 
 struct SimulationSettings {
     bool step_by_step = false;
@@ -538,11 +541,13 @@ struct SimulationSettings {
     sim::GridSize3 grid_dim = { 16, 16, 16 };
 
     // Fluid source.
-    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(7, 1, 7), sim::SmokeData(0, 0) };
+    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(7, 1, 7),
+                                                sim::SmokeData(kInitialEmissionRate, 0) };
 
     // Wall with set velocity.
     sim::GridIndex3 wall_pos = sim::GridIndex3(7, 0, 7);
-    SphericalCoords<sim::Float> wall_velo_spherical = sphericalFromEuclidean(sim::Vector3(0, 1, 0));
+    SphericalCoords<sim::Float> wall_velo_spherical =
+        sphericalFromEuclidean(kInitialEmissionSpeed * glm::normalize(sim::Vector3(0, 1, -1)));
 };
 
 static Framebuffer g_framebuffer;
@@ -1187,9 +1192,9 @@ static void ShowSettings(bool *p_open)
     ImGui::Columns(2);
     ImGui::Separator();
 
-    const auto newTreeNode = [](const char *label) {
-        ImGui::SetNextTreeNodeOpen(true, ImGuiCond_FirstUseEver);
-        const bool node_open = ImGui::TreeNode("Object", label);
+    const auto newTreeNode = [](const char *label, bool open_by_default = true) {
+        ImGui::SetNextTreeNodeOpen(open_by_default, ImGuiCond_FirstUseEver);
+        const bool node_open = ImGui::TreeNode(label, label);
         ImGui::NextColumn();
         ImGui::AlignTextToFramePadding();
         ImGui::NextColumn();
@@ -1201,42 +1206,6 @@ static void ShowSettings(bool *p_open)
         ImGui::AlignTextToFramePadding();
 
         if (newTreeNode("Rendering")) {
-
-            // Show cube.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("show opaque object");
-            ImGui::NextColumn();
-            ImGui::Checkbox("##cube", &g_render_settings.show_spinning_cube);
-            ImGui::NextColumn();
-
-            // sRGB.
-            const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("enable sRGB");
-            ImGui::NextColumn();
-            bool f = srgb_enabled;
-            ImGui::Checkbox("##srgb", &f);
-            if (f && !srgb_enabled) {
-                glEnable(GL_FRAMEBUFFER_SRGB);
-            } else if (!f && srgb_enabled) {
-                glDisable(GL_FRAMEBUFFER_SRGB);
-            }
-            ImGui::NextColumn();
-
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("enable dithering");
-            ImGui::NextColumn();
-            ImGui::Checkbox("##dither", &g_render_settings.dither_voxels);
-            ImGui::NextColumn();
-
-            // Reload shaders.
-            ImGui::AlignTextToFramePadding();
-            ImGui::NextColumn();
-            if (ImGui::Button("Reload shaders")) {
-                reloadShaders();
-            }
-            ImGui::NextColumn();
-
 
             if (newTreeNode("Voxel rendering")) {
 
@@ -1256,22 +1225,71 @@ static void ShowSettings(bool *p_open)
 
                 // Density quantization.
                 ImGui::AlignTextToFramePadding();
-                ImGui::Text("fluid density quantization");
+                ImGui::Text("density quantization");
                 ImGui::NextColumn();
                 ImGui::SliderInt("##quantizaiton", &g_render_settings.voxel_density_quantization, 1, 255);
                 ImGui::NextColumn();
 
-                // Volume extents.
+                ImGui::TreePop();
+            }
+
+            if (newTreeNode("Volume placement", false)) {
+
+                // Volume origin.
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text("volume origin");
                 ImGui::NextColumn();
                 ImGui::SliderFloat3("##origin", &g_render_settings.volume_origin[0], -4, 4);
                 ImGui::NextColumn();
 
+                // Volume size.
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text("volume size");
                 ImGui::NextColumn();
                 ImGui::SliderFloat3("##size", &g_render_settings.volume_size[0], 0.1f, 10.0f);
+                ImGui::NextColumn();
+
+                ImGui::TreePop();
+            }
+
+            if (newTreeNode("Misc", false)) {
+
+                // Reload shaders.
+                ImGui::AlignTextToFramePadding();
+                ImGui::NextColumn();
+                if (ImGui::Button("Reload shaders")) {
+                    reloadShaders();
+                }
+                ImGui::NextColumn();
+
+                // Dithering.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("enable dithering");
+                ImGui::NextColumn();
+                ImGui::Checkbox("##dither", &g_render_settings.dither_voxels);
+                ImGui::NextColumn();
+
+                // sRGB.
+                const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("enable sRGB");
+                ImGui::NextColumn();
+                bool f = srgb_enabled;
+                ImGui::Checkbox("##srgb", &f);
+                if (f && !srgb_enabled) {
+                    glEnable(GL_FRAMEBUFFER_SRGB);
+                } else if (!f && srgb_enabled) {
+                    glDisable(GL_FRAMEBUFFER_SRGB);
+                }
+                ImGui::NextColumn();
+
+                ImGui::Spacing();
+
+                // Show cube.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("show opaque object");
+                ImGui::NextColumn();
+                ImGui::Checkbox("##cube", &g_render_settings.show_spinning_cube);
                 ImGui::NextColumn();
 
                 ImGui::TreePop();
@@ -1287,48 +1305,53 @@ static void ShowSettings(bool *p_open)
 
         if (newTreeNode("Simulation")) {
 
-            // Simulate step-by-step.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("simulate step-by-step");
-            ImGui::NextColumn();
-            ImGui::Checkbox("##step-by-step", &g_simulation_settings.step_by_step);
-            ImGui::NextColumn();
+            if (newTreeNode("Solver", false)) {
 
-            // Advance simulation by one step.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("advance simulation");
-            ImGui::NextColumn();
-            g_simulation_settings.do_advection_step = ImGui::Button("Advect");
-            ImGui::SameLine();
-            g_simulation_settings.do_pressure_step = ImGui::Button("Pressure Solve");
-            ImGui::NextColumn();
+                // Simulate step-by-step.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("simulate step-by-step");
+                ImGui::NextColumn();
+                ImGui::Checkbox("##step-by-step", &g_simulation_settings.step_by_step);
+                ImGui::NextColumn();
 
-            // Set max solver iterations.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("max solver iterations");
-            ImGui::NextColumn();
-            ImGui::SliderInt("##max-iter", &g_simulation_settings.max_solver_iterations, 1, 200);
-            ImGui::NextColumn();
+                // Advance simulation by one step.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("advance simulation");
+                ImGui::NextColumn();
+                g_simulation_settings.do_advection_step = ImGui::Button("Advect");
+                ImGui::SameLine();
+                g_simulation_settings.do_pressure_step = ImGui::Button("Pressure Solve");
+                ImGui::NextColumn();
 
-            // Visualize velocity field.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("visualize velocity field");
-            ImGui::NextColumn();
-            ImGui::Checkbox("U", &g_render_settings.visualize_velocity_field[0]);
-            ImGui::SameLine();
-            ImGui::Checkbox("V", &g_render_settings.visualize_velocity_field[1]);
-            ImGui::SameLine();
-            ImGui::Checkbox("W", &g_render_settings.visualize_velocity_field[2]);
-            ImGui::Spacing();
-            ImGui::SameLine();
-            ImGui::NextColumn();
+                // Set max solver iterations.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("max solver iterations");
+                ImGui::NextColumn();
+                ImGui::SliderInt("##max-iter", &g_simulation_settings.max_solver_iterations, 1, 200);
+                ImGui::NextColumn();
 
-            // Fluid density.
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("fluid density");
-            ImGui::NextColumn();
-            ImGui::SliderFloat("##density", &g_simulation_settings.fluid_density, 0.1f, 10.0f);
-            ImGui::NextColumn();
+                // Visualize velocity field.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("visualize velocity field");
+                ImGui::NextColumn();
+                ImGui::Checkbox("U", &g_render_settings.visualize_velocity_field[0]);
+                ImGui::SameLine();
+                ImGui::Checkbox("V", &g_render_settings.visualize_velocity_field[1]);
+                ImGui::SameLine();
+                ImGui::Checkbox("W", &g_render_settings.visualize_velocity_field[2]);
+                ImGui::Spacing();
+                ImGui::SameLine();
+                ImGui::NextColumn();
+
+                ImGui::TreePop();
+            }
+
+            //// Fluid density.
+            // ImGui::AlignTextToFramePadding();
+            // ImGui::Text("fluid density");
+            // ImGui::NextColumn();
+            // ImGui::SliderFloat("##density", &g_simulation_settings.fluid_density, 0.1f, 10.0f);
+            // ImGui::NextColumn();
 
             ImGui::Spacing();
 
@@ -1345,39 +1368,39 @@ static void ShowSettings(bool *p_open)
             // Fluid source.
             if (newTreeNode("Fluid source")) {
 
-                positionControl("fluid source position", g_simulation_settings.source.pos);
+                positionControl("position", g_simulation_settings.source.pos);
 
                 ImGui::AlignTextToFramePadding();
-                ImGui::Text("source rate: concetration");
+                ImGui::Text("emission rate");
                 ImGui::NextColumn();
                 ImGui::SliderFloat(
-                    "##source-cc", &g_simulation_settings.source.rate.concentration, 0.0f, 10.0f);
+                    "##source-cc", &g_simulation_settings.source.rate.concentration, 0.0f, 50.0f);
                 ImGui::NextColumn();
 
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("source rate: temperature");
-                ImGui::NextColumn();
-                ImGui::SliderFloat(
-                    "##source-temp", &g_simulation_settings.source.rate.temperature, 0.0f, 10.0f);
-                ImGui::NextColumn();
+                // ImGui::AlignTextToFramePadding();
+                // ImGui::Text("source rate: temperature");
+                // ImGui::NextColumn();
+                // ImGui::SliderFloat(
+                //    "##source-temp", &g_simulation_settings.source.rate.temperature, 0.0f, 10.0f);
+                // ImGui::NextColumn();
 
                 ImGui::TreePop();
             }
 
             // Solid wall.
             if (newTreeNode("Solid wall")) {
-                positionControl("solid wall position", g_simulation_settings.wall_pos);
+                positionControl("position", g_simulation_settings.wall_pos);
 
                 auto &solid_v = g_simulation_settings.wall_velo_spherical;
                 ImGui::AlignTextToFramePadding();
-                ImGui::Text("solid speed");
+                ImGui::Text("velocity speed");
                 ImGui::NextColumn();
-                ImGui::SliderFloat("##solid-vel-dir", &solid_v.radius, 0.0f, 10.0f);
+                ImGui::SliderFloat("##solid-speed", &solid_v.radius, 0.0f, 50.0f);
                 solid_v.radius = std::max(solid_v.radius, 0.0f);
                 ImGui::NextColumn();
 
                 ImGui::AlignTextToFramePadding();
-                ImGui::Text("solid velocity direction");
+                ImGui::Text("velocity direction");
                 ImGui::NextColumn();
                 {
                     float angles[2];
@@ -1427,6 +1450,7 @@ int main()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_DEPTH_BITS, 0);
     glfwWindowHint(GLFW_STENCIL_BITS, 0);
+    glfwWindowHint(GLFW_MAXIMIZED, true);
     GLFWwindow *window = glfwCreateWindow(640, 480, "", nullptr, nullptr);
     if (!window) {
         g_logger->critical("Failed to create window.");
