@@ -48,19 +48,54 @@ vec3 getRayPos(Ray ray, float t)
     return ray.origin + t * ray.direction;
 }
 
-// Returns the parameters when the ray enters and exits the box in
-// the first and second component of a vec2 respectively.
-// If the enter parameter is greater than the exit parameter, the ray
-// misses the box.
-vec2 intersectRayBox(Ray ray, Box box)
+bvec3 minMask(vec3 v)
 {
-    vec3 t0 = (box.origin - ray.origin) / ray.direction;
-    vec3 t1 = (box.origin + box.size - ray.origin) / ray.direction;
-    vec3 tm = min(t0, t1);
-    vec3 tM = max(t0, t1);
-    float t_enter = max(tm.x, max(tm.y, tm.z));
-    float t_exit = min(tM.x, min(tM.y, tM.z));
-    return vec2(t_enter, t_exit);
+    return bvec3(
+        uint(v.x <= v.y) & uint(v.x <= v.z),
+        uint(v.y < v.x) & uint(v.y <= v.z),
+        uint(v.z < v.x) & uint(v.z < v.y));
+}
+
+float min3(vec3 v)
+{
+    return min(v.x, min(v.y, v.z));
+}
+
+float max3(vec3 v)
+{
+    return max(v.x, max(v.y, v.z));
+}
+
+// Return ray parameterns (t values) which makes the ray reach the a given
+// coordinate of p. Return the three such t values in a vector.
+vec3 paramToPoint(Ray ray, vec3 p)
+{
+    return (p - ray.origin) / ray.direction;
+}
+
+struct BoxIntersection
+{
+    vec3 t3_in;
+    vec3 t3_out;
+};
+BoxIntersection intersectRayBox(Ray ray, Box box)
+{
+    vec3 t0 = paramToPoint(ray, box.origin);
+    vec3 t1 = paramToPoint(ray, box.origin + box.size);
+    BoxIntersection isect;
+    isect.t3_in = min(t0, t1);
+    isect.t3_out = max(t0, t1);
+    return isect;
+}
+
+ivec3 gridIndexFromWorldPos(vec3 p)
+{
+    return ivec3(floor((p - origin) / size * grid_dim));
+}
+
+vec3 getVoxelOrigin(ivec3 i)
+{
+    return origin + i * size / grid_dim;
 }
 
 vec3 getVoxelExtinction(ivec3 index)
@@ -74,20 +109,19 @@ vec3 getVoxelExtinction(ivec3 index)
 
 in vec2 uv;
 void main() {
+    // Initialize ray.
     Ray ray;
     ray.origin = eye_pos;
     vec3 ray_dir_view = vec3(view_size * (uv - 0.5), -1.0);
     ray.direction = normalize(eye_orientation * ray_dir_view);
 
-    // Find the entry and exit points of the grid domain.
+    // Compute entry and exit point parameters.
     Box bounds;
     bounds.origin = origin;
     bounds.size = size;
-
-    // Compute entry and exit point parameters.
-    vec2 params = intersectRayBox(ray, bounds);
-    float t_in = params.x;
-    float t_out = params.y;
+    BoxIntersection isect = intersectRayBox(ray, bounds);
+    float t_in = max3(isect.t3_in);
+    float t_out = min3(isect.t3_out);
 
     // Discard if ray misses the volume bounds.
     if (t_in >= t_out || t_out < 0) {
@@ -95,55 +129,43 @@ void main() {
     }
 
     // Handle camera inside grid bounds.
+    bool inside_volume = (t_in < 0 && t_out > 0);
     float t_near = cam_nearz / dot(eye_dir, ray.direction);
-    if (t_in < 0 && t_out > 0) {
+    if (inside_volume) {
         t_in = t_near;
     }
 
-    // Terminate rays using the depth buffer.
+    // Terminate ray if at current depth.
     float depth = texture(depth, uv).x;
     float t_thresh = t_near / depth;
-    t_in = min(t_in, t_thresh);
+    if (t_thresh <= t_in)
+        discard;
     t_out = min(t_out, t_thresh);
 
-    // Perform 3D DDA traversal.
-    float eps = 1e-5;
-    ivec3 index_min = ivec3(0, 0, 0);
-    ivec3 index_entry = ivec3(floor((getRayPos(ray, t_in + eps) - bounds.origin) / bounds.size * grid_dim));
-    ivec3 index = index_entry;
-    Box voxel;
-    voxel.size = bounds.size / grid_dim;
-    voxel.origin = bounds.origin + index_entry * voxel.size;
-    vec3 transmittance = vec3(1, 1, 1);
+    // Optical depth since last interface.
+    vec3 tau = vec3(0, 0, 0);
+
+    // Perform DDA traversal.
+    vec3 voxel_size = size / grid_dim;
+    ivec3 i_step = ivec3(sign(ray.direction));
+    vec3 t_step = abs(voxel_size / ray.direction);
+    vec3 p_entry = getRayPos(ray, t_in + 1e-5);
+    ivec3 index = gridIndexFromWorldPos(p_entry);
+    vec3 t3 = paramToPoint(ray, getVoxelOrigin(index + clamp(i_step, 0, 1)));
     float t = t_in;
-    ivec3 step = ivec3(sign(ray.direction));
     for (int i = 0; i < 100; ++i) {
         vec3 extinction = getVoxelExtinction(index);
-        vec3 t0 = (voxel.origin - ray.origin) / ray.direction;
-        vec3 t1 = (voxel.origin + voxel.size - ray.origin) / ray.direction;
-        vec3 tM = max(t0, t1);
-        float t_exit = min(tM.x, min(tM.y, tM.z));
-        t_exit = min(t_exit, t_out);
-        transmittance *= exp(-extinction * (t_exit - t));
-        t = t_exit;
-        if (t >= t_out)
-            break;
-        if (t_exit == tM.x) {
-            index.x += step.x;
-            voxel.origin.x += step.x * voxel.size.x;
-        }
-        if (t_exit == tM.y) {
-            index.y += step.y;
-            voxel.origin.y += step.y * voxel.size.y;
-        }
-        if (t_exit == tM.z) {
-            index.z += step.z;
-            voxel.origin.z += step.z * voxel.size.z;
-        }
-        if (any(lessThan(index, index_min)) || any(greaterThanEqual(index, grid_dim))) {
+        float t_next = min(t_out, min3(t3));
+        bvec3 mask = minMask(t3);
+        index += i_step * ivec3(mask);
+        t3 += t_step * ivec3(mask);
+        tau += extinction * (t_next - t);
+        t = t_next;
+        if (t >= t_out || any(lessThan(index, ivec3(0, 0, 0))) || any(greaterThanEqual(index, grid_dim))) {
             break;
         }
     }
+    vec3 transmittance = exp(-tau);
 
     // Dither.
     if (ditheringEnabled()) {
