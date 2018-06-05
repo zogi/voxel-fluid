@@ -1191,19 +1191,19 @@ static void ShowOverlay(bool *p_open)
 
 // From imgui_demo.cpp (https://github.com/ocornut/imgui)
 
-void ImGuiSlider(const char *label, int &var, int min, int max)
+bool ImGuiSlider(const char *label, int &var, int min, int max)
 {
-    ImGui::SliderInt(label, &var, min, max);
+    return ImGui::SliderInt(label, &var, min, max);
 };
 
-void ImGuiSlider(const char *label, float &var, float min, float max)
+bool ImGuiSlider(const char *label, float &var, float min, float max)
 {
-    ImGui::SliderFloat(label, &var, min, max);
+    return ImGui::SliderFloat(label, &var, min, max);
 };
 
-void ImGuiSlider(const char *label, glm::vec3 &var, float min, float max)
+bool ImGuiSlider(const char *label, glm::vec3 &var, float min, float max)
 {
-    ImGui::SliderFloat3(label, &var[0], min, max);
+    return ImGui::SliderFloat3(label, &var[0], min, max);
 };
 
 static void ShowSettings(bool *p_open)
@@ -1232,9 +1232,10 @@ static void ShowSettings(bool *p_open)
         ImGui::AlignTextToFramePadding();
         ImGui::Text(label);
         ImGui::NextColumn();
-        ImGui::ColorPicker3("", &var[0]);
+        const auto res = ImGui::ColorPicker3("", &var[0]);
         ImGui::NextColumn();
         ImGui::PopID();
+        return res;
     };
 
     const auto sliderControl = [](const char *label, auto &var, auto min, auto max) {
@@ -1242,9 +1243,10 @@ static void ShowSettings(bool *p_open)
         ImGui::AlignTextToFramePadding();
         ImGui::Text(label);
         ImGui::NextColumn();
-        ImGuiSlider("", var, min, max);
+        const auto res = ImGuiSlider("", var, min, max);
         ImGui::NextColumn();
         ImGui::PopID();
+        return res;
     };
 
     // The control presents angles in degrees, but operates on variables containing radians.
@@ -1253,17 +1255,18 @@ static void ShowSettings(bool *p_open)
         ImGui::AlignTextToFramePadding();
         ImGui::Text(label);
         ImGui::NextColumn();
-        {
-            // Flip azimuthal so increasing the user-facing value rotates clockwise.
-            float angles[2];
-            angles[0] = glm::degrees(polar_rad);
-            angles[1] = -glm::degrees(azimuthal_rad);
-            ImGui::DragFloat2("", angles, 0.1f);
-            polar_rad = glm::radians(angles[0]);
-            azimuthal_rad = -glm::radians(angles[1]);
-        }
+
+        // Flip azimuthal so increasing the user-facing value rotates clockwise.
+        float angles[2];
+        angles[0] = glm::degrees(polar_rad);
+        angles[1] = -glm::degrees(azimuthal_rad);
+        const auto res = ImGui::DragFloat2("", angles, 0.1f);
+        polar_rad = glm::radians(angles[0]);
+        azimuthal_rad = -glm::radians(angles[1]);
+
         ImGui::NextColumn();
         ImGui::PopID();
+        return res;
     };
 
     // Rendering settings.
