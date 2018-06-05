@@ -1260,7 +1260,7 @@ static void ShowSettings(bool *p_open)
             float angles[2];
             angles[0] = glm::degrees(polar_rad);
             angles[1] = glm::degrees(azimuthal_rad);
-            ImGui::DragFloat2("", angles);
+            ImGui::DragFloat2("", angles, 0.1f);
             polar_rad = glm::radians(angles[0]);
             azimuthal_rad = glm::radians(angles[1]);
         }
