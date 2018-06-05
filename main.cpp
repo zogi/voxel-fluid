@@ -213,6 +213,8 @@ std::string readFileContents(const Path &file_path)
 
 // === Shaders' codes used by the application ===
 
+typedef glm::vec3 RGBColor;
+
 #pragma pack(push, 1)
 struct CommonUniforms {
     glm::mat4 mvp;
@@ -232,7 +234,7 @@ struct GridData {
     glm::ivec3 grid_dim;
     uint32_t _pad3;
 
-    glm::vec3 voxel_extinction;
+    RGBColor voxel_extinction;
     uint32_t grid_flags;
 };
 #pragma pack(pop)
@@ -515,18 +517,19 @@ struct GUIState {
 };
 
 struct RenderSettings {
-    bool show_spinning_cube = false;
-    bool dither_voxels = true;
-    glm::vec3 voxel_transmit_color = glm::vec3(60 / 255.0f, 195 / 255.0f, 222 / 255.0f);
-    float voxel_extinction_intensity = 70.0f;
-    bool visualize_velocity_field[3] = { false, false, false };
-    int voxel_density_quantization = 16;
+    RGBColor voxel_transmit_color = { glm::vec3(60, 195, 222) / 255.0f };
+    float voxel_extinction_intensity = 50.0f;
+    int voxel_density_quantization = 32;
     glm::vec3 volume_origin = { 0, 0, 0 };
     glm::vec3 volume_size = { 4, 4, 4 };
+
+    bool show_spinning_cube = false;
+    bool dither_voxels = true;
+    bool visualize_velocity_field[3] = { false, false, false };
 };
 
-const float kInitialEmissionRate = 25.0f;
-const float kInitialEmissionSpeed = 30.0f;
+const float kInitialEmissionRate = 40.0f;
+const float kInitialEmissionSpeed = 50.0f;
 
 struct SimulationSettings {
     bool step_by_step = false;
@@ -541,13 +544,13 @@ struct SimulationSettings {
     sim::GridSize3 grid_dim = { 16, 16, 16 };
 
     // Fluid source.
-    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(7, 1, 7),
+    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(0, 1, 0),
                                                 sim::SmokeData(kInitialEmissionRate, 0) };
 
     // Wall with set velocity.
-    sim::GridIndex3 wall_pos = sim::GridIndex3(7, 0, 7);
+    sim::GridIndex3 wall_pos = sim::GridIndex3(0, 0, 0);
     SphericalCoords<sim::Float> wall_velo_spherical =
-        sphericalFromEuclidean(kInitialEmissionSpeed * glm::normalize(sim::Vector3(0, 1, -1)));
+        sphericalFromEuclidean(kInitialEmissionSpeed * glm::normalize(sim::Vector3(1, 1, 1)));
 };
 
 static Framebuffer g_framebuffer;
@@ -613,7 +616,7 @@ void CameraUI::tick()
     if (!mEnabled || !mCamera || !mWindow)
         return;
 
-    constexpr float CAMERA_SPEED = 2.0f; // units per second
+    constexpr float CAMERA_SPEED = 8.0f; // units per second
     const auto forward_vector = mCamera->getForwardVector();
     const auto right_vector = glm::rotate(mCamera->orientation, glm::vec3(1, 0, 0));
     const auto up_vector = glm::rotate(mCamera->orientation, glm::vec3(0, 1, 0));
@@ -1591,7 +1594,7 @@ int main()
     }
 
     // Init camera.
-    g_camera.eye_pos = glm::vec3(-0.54, 3.28, 3.39);
+    g_camera.eye_pos = glm::vec3(-1.6, 4.1, 4.4);
     g_camera.orientation = glm::quatLookAt(glm::vec3(0.66, -0.48, -0.58), glm::vec3(0, 1, 0));
     static CameraUI camera_ui;
     camera_ui.setWindow(window);
@@ -1614,8 +1617,8 @@ int main()
     const auto grid_dim = glm::ivec3(16, 16, 16);
     GridData grid_data;
     grid_data.grid_dim = grid_dim;
-    grid_data.origin = glm::vec3(0, 0, 0);
-    grid_data.size = glm::vec3(4, 4, 4);
+    grid_data.origin = g_render_settings.volume_origin;
+    grid_data.size = g_render_settings.volume_size;
     const int fluid_fps = 30;
 
     const auto center = grid_data.grid_dim / 2 - 1;
