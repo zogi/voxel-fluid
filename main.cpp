@@ -282,9 +282,9 @@ static std::string arrow_vs_code = R"glsl(
     )glsl";
 static std::string arrow_fs_code = R"glsl(
     #version 430
-    uniform vec3 color;
+    uniform vec4 color;
     void main() {
-        gl_FragColor = vec4(color, 1.0);
+        gl_FragColor = color;
     }
     )glsl";
 
@@ -537,6 +537,8 @@ struct RenderSettings {
     bool show_spinning_cube = false;
     bool dither_voxels = true;
     bool visualize_velocity_field[3] = { false, false, false };
+    float velocity_arrow_opacity = 0.0f;
+    bool show_velocity_arrow = true;
 };
 
 const float kInitialEmissionRate = 40.0f;
@@ -1413,10 +1415,16 @@ static void ShowSettings(bool *p_open)
                 // sliderControl("temperature rate", g_simulation_settings.source.rate.temperature, 0.0f, 100.0f);
 
                 // Velocity.
-                auto &solid_v = g_simulation_settings.source_velocity_spherical;
-                sliderControl("velocity speed", solid_v.radius, 0.0f, 70.0f);
-                solid_v.radius = std::max(solid_v.radius, 0.0f);
-                sphericalAnglesControl("velocity direction", solid_v.azimuthal, solid_v.polar);
+                auto &vel = g_simulation_settings.source_velocity_spherical;
+                bool dragging = false;
+                dragging |= sliderControl("velocity speed", vel.radius, 0.0f, 70.0f);
+                vel.radius = std::max(vel.radius, 0.0f);
+                dragging |= sphericalAnglesControl("velocity direction", vel.azimuthal, vel.polar);
+                if (dragging) {
+                    g_render_settings.velocity_arrow_opacity = 1.0f;
+                }
+
+                checkboxControl("show arrow on change", g_render_settings.show_velocity_arrow);
 
                 ImGui::TreePop();
             }
@@ -1685,7 +1693,7 @@ int main()
     }
     const auto drawArrow = [&arrow_vao, &arrow_program, arrow_program_mvp_loc, arrow_program_color_loc](
                                const glm::vec3 &from, const glm::vec3 &to, const glm::vec3 &color,
-                               const glm::mat4 &view_proj) {
+                               const glm::mat4 &view_proj, float opacity = 1.0f) {
         glUseProgram(arrow_program);
         const float scale_factor = glm::length(to - from);
         const auto rotate = glm::mat4(glm::rotation({ 1, 0, 0 }, (to - from) / scale_factor));
@@ -1694,9 +1702,12 @@ int main()
         const auto model = translate * rotate * scale;
         const auto mvp = view_proj * model;
         glUniformMatrix4fv(arrow_program_mvp_loc, 1, GL_FALSE, &mvp[0][0]);
-        glUniform3f(arrow_program_color_loc, color.r, color.g, color.b);
+        glUniform4f(arrow_program_color_loc, color.r, color.g, color.b, opacity);
         glBindVertexArray(arrow_vao);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDrawArrays(GL_LINES, 0, 6);
+        glDisable(GL_BLEND);
         GL_CHECK();
     };
 
@@ -1939,13 +1950,6 @@ int main()
                         drawArrow(pos, pos + glm::vec3(0, 0, length), glm::vec3(0, 0, 0), view_proj);
                     }
                 }
-
-                const auto &source_pos_grid = g_simulation_settings.source_pos;
-                const auto pos = grid_data.origin + glm::vec3(source_pos_grid) * renderFromGrid;
-                const auto &source_vel_phys =
-                    euclideanFromSpherical(g_simulation_settings.source_velocity_spherical);
-                const auto vel = renderFromPhys * source_vel_phys;
-                drawArrow(pos, pos + 0.1f * vel, glm::vec3(0.2, 0.8, 0.2), view_proj);
             }
 
             if (g_render_settings.show_spinning_cube) {
@@ -2017,6 +2021,24 @@ int main()
 
             // Disable blending.
             glDisable(GL_BLEND);
+
+            // Draw velocity arrow.
+            {
+                auto &opacity = g_render_settings.velocity_arrow_opacity;
+                if (g_render_settings.show_velocity_arrow && opacity > 1e-5f) {
+                    const auto dx = fluid_sim.dx();
+                    const auto renderFromGrid = grid_data.size / glm::vec3(grid_data.grid_dim);
+                    const auto renderFromPhys = renderFromGrid / dx;
+                    const auto source_pos_grid =
+                        glm::vec3(g_simulation_settings.source_pos) + glm::vec3(0.5, 0.5, 0.5);
+                    const auto pos = grid_data.origin + source_pos_grid * renderFromGrid;
+                    const auto &source_vel_phys =
+                        euclideanFromSpherical(g_simulation_settings.source_velocity_spherical);
+                    const auto vel = renderFromPhys * source_vel_phys;
+                    drawArrow(pos, pos + 0.1f * vel, glm::vec3(1, 1, 1), view_proj, opacity);
+                    opacity *= std::pow(0.002f, g_time_delta);
+                }
+            }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             GL_CHECK();
