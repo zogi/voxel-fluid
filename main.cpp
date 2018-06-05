@@ -1254,12 +1254,13 @@ static void ShowSettings(bool *p_open)
         ImGui::Text(label);
         ImGui::NextColumn();
         {
+            // Flip azimuthal so increasing the user-facing value rotates clockwise.
             float angles[2];
             angles[0] = glm::degrees(polar_rad);
-            angles[1] = glm::degrees(azimuthal_rad);
+            angles[1] = -glm::degrees(azimuthal_rad);
             ImGui::DragFloat2("", angles, 0.1f);
             polar_rad = glm::radians(angles[0]);
-            azimuthal_rad = glm::radians(angles[1]);
+            azimuthal_rad = -glm::radians(angles[1]);
         }
         ImGui::NextColumn();
         ImGui::PopID();
@@ -1394,7 +1395,7 @@ static void ShowSettings(bool *p_open)
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text(label);
                 ImGui::NextColumn();
-                ImGui::DragInt3(fmt::format("##slider-{}", label).c_str(), &var.x);
+                ImGui::DragInt3(fmt::format("##slider-{}", label).c_str(), &var.x, 0.1f);
                 var = glm::max(var, sim::GridIndex3(0));
                 var = glm::min(var, g_simulation_settings.grid_dim - 1);
                 ImGui::NextColumn();
