@@ -1888,7 +1888,7 @@ int main()
                 view_proj = proj * view;
             }
 
-            // Visualize velocity field.
+            // Draw arrows.
             {
                 const auto dx = fluid_sim.dx();
                 const auto renderFromGrid = grid_data.size / glm::vec3(grid_data.grid_dim);
@@ -1941,6 +1941,13 @@ int main()
                         drawArrow(pos, pos + glm::vec3(0, 0, length), glm::vec3(0, 0, 0), view_proj);
                     }
                 }
+
+                const auto &source_pos_grid = g_simulation_settings.source_pos;
+                const auto pos = grid_data.origin + glm::vec3(source_pos_grid) * renderFromGrid;
+                const auto &source_vel_phys =
+                    euclideanFromSpherical(g_simulation_settings.source_velocity_spherical);
+                const auto vel = renderFromPhys * source_vel_phys;
+                drawArrow(pos, pos + 0.1f * vel, glm::vec3(0.2, 0.8, 0.2), view_proj);
             }
 
             if (g_render_settings.show_spinning_cube) {
