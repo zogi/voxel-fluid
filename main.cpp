@@ -1269,6 +1269,17 @@ static void ShowSettings(bool *p_open)
         return res;
     };
 
+    const auto checkboxControl = [](const char *label, bool &var) {
+        ImGui::PushID(label);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text(label);
+        ImGui::NextColumn();
+        const auto res = ImGui::Checkbox("", &var);
+        ImGui::NextColumn();
+        ImGui::PopID();
+        return res;
+    };
+
     // Rendering settings.
     {
         ImGui::AlignTextToFramePadding();
@@ -1310,34 +1321,22 @@ static void ShowSettings(bool *p_open)
                 ImGui::NextColumn();
 
                 // Dithering.
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("enable dithering");
-                ImGui::NextColumn();
-                ImGui::Checkbox("##dither", &g_render_settings.dither_voxels);
-                ImGui::NextColumn();
+                checkboxControl("enable dithering", g_render_settings.dither_voxels);
 
                 // sRGB.
                 const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("enable sRGB");
-                ImGui::NextColumn();
                 bool f = srgb_enabled;
-                ImGui::Checkbox("##srgb", &f);
+                checkboxControl("enable sRGB", f);
                 if (f && !srgb_enabled) {
                     glEnable(GL_FRAMEBUFFER_SRGB);
                 } else if (!f && srgb_enabled) {
                     glDisable(GL_FRAMEBUFFER_SRGB);
                 }
-                ImGui::NextColumn();
 
                 ImGui::Spacing();
 
                 // Show cube.
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("show opaque object");
-                ImGui::NextColumn();
-                ImGui::Checkbox("##cube", &g_render_settings.show_spinning_cube);
-                ImGui::NextColumn();
+                checkboxControl("show opaque object", g_render_settings.show_spinning_cube);
 
                 ImGui::TreePop();
             }
@@ -1355,11 +1354,7 @@ static void ShowSettings(bool *p_open)
             if (newTreeNode("Solver", false)) {
 
                 // Simulate step-by-step.
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("simulate step-by-step");
-                ImGui::NextColumn();
-                ImGui::Checkbox("##step-by-step", &g_simulation_settings.step_by_step);
-                ImGui::NextColumn();
+                checkboxControl("simulate step-by-step", g_simulation_settings.step_by_step);
 
                 // Advance simulation by one step.
                 ImGui::AlignTextToFramePadding();
