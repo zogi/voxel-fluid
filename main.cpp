@@ -374,7 +374,9 @@ glm::vec3 Camera::getForwardVector() const { return glm::rotate(orientation, glm
 
 const std::string kShadersPath = "shader";
 
-GLProgram loadShader(const std::string &json_path)
+typedef std::unordered_map<std::string, std::string> DefineMap;
+
+GLProgram loadShader(const std::string &json_path, const DefineMap &defines = {})
 {
     std::ifstream fin(json_path);
     if (!fin) {
@@ -424,12 +426,21 @@ GLProgram loadShader(const std::string &json_path)
         }
     };
 
+    // Concatenate GLSL code from the defines.
+    std::stringstream ss_defines;
+    ss_defines << "#define JSON_SHADER\n";
+    for (const auto &define : defines) {
+        ss_defines << "#define " << define.first << " " << define.second << "\n";
+    }
+
     // Load shader sources, then compile and link the shaders.
     std::vector<GLShader> shaders;
     for (int i = 0; i < kShaderTypeCount; ++i) {
         const auto shader_type = shader_types[i];
         const auto &source_path_list = source_path_lists[i];
         std::stringstream ss_source;
+        ss_source << "#version 430\n";
+        ss_source << ss_defines.str();
         for (const auto &source_path : source_path_list) {
             ss_source << readFileContents(kShadersPath + "/" + source_path) << "\n";
         }

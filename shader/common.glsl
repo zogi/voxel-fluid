@@ -1,4 +1,6 @@
+#ifndef JSON_SHADER
 #version 430
+#endif
 
 layout(std140) uniform CommonUniforms {
     mat4 mvp;
