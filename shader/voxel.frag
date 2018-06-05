@@ -56,6 +56,11 @@ bvec3 minMask(vec3 v)
         uint(v.z < v.x) & uint(v.z < v.y));
 }
 
+bvec3 maxMask(vec3 v)
+{
+    return minMask(-v);
+}
+
 float min3(vec3 v)
 {
     return min(v.x, min(v.y, v.z));
@@ -142,19 +147,37 @@ void main() {
         discard;
     t_out = min(t_out, t_thresh);
 
+    vec3 radiance = vec3(0, 0, 0);
+    vec3 sign_direction = sign(ray.direction);
+    vec3 normal = -sign_direction * vec3(maxMask(isect.t3_in));
+
     // Optical depth since last interface.
     vec3 tau = vec3(0, 0, 0);
 
     // Perform DDA traversal.
     vec3 voxel_size = size / grid_dim;
-    ivec3 i_step = ivec3(sign(ray.direction));
+    ivec3 i_step = ivec3(sign_direction);
     vec3 t_step = abs(voxel_size / ray.direction);
     vec3 p_entry = getRayPos(ray, t_in + 1e-5);
     ivec3 index = gridIndexFromWorldPos(p_entry);
     vec3 t3 = paramToPoint(ray, getVoxelOrigin(index + clamp(i_step, 0, 1)));
     float t = t_in;
+    bool inside_fluid = false;
+    vec3 opacity = vec3(1, 1, 1)*0.01;
     for (int i = 0; i < 100; ++i) {
         vec3 extinction = getVoxelExtinction(index);
+        bool inside_fluid_next = dot(extinction, vec3(1, 1, 1) / 3.0f) > 0.1;
+        if (inside_fluid_next != inside_fluid) {
+            vec3 Li = vec3(1, 1, 1);
+            vec3 wo = -ray.direction;
+            vec3 wi = -reflect(wo, normal);
+            vec3 albedo = vec3(0, 0, 0);
+            BRDFResult surface = BRDF(wi, wo, normal, 0.0, 0.2, albedo);
+            radiance += exp(-tau) * opacity * surface.brdf * Li;
+            tau += -log((1 - opacity) + opacity * (1 - surface.F));
+        }
+        inside_fluid = inside_fluid_next;
+
         float t_next = min(t_out, min3(t3));
         bvec3 mask = minMask(t3);
         index += i_step * ivec3(mask);
@@ -164,17 +187,20 @@ void main() {
         if (t >= t_out || any(lessThan(index, ivec3(0, 0, 0))) || any(greaterThanEqual(index, grid_dim))) {
             break;
         }
+        normal = -sign_direction * vec3(mask);
     }
     vec3 transmittance = exp(-tau);
+    vec3 background = vec3(1, 1, 1);
+    radiance += transmittance * background;
 
     // Dither.
     if (ditheringEnabled()) {
         float t = fract(time);
-        transmittance += vec3(
+        radiance += vec3(
             dither(uv, t),
             dither(uv, t + 100.0),
             dither(uv, t + 200.0));
     }
 
-    gl_FragColor = vec4(transmittance, 1.0);
+    gl_FragColor = vec4(radiance, 1.0);
 }
