@@ -555,12 +555,9 @@ struct SimulationSettings {
     sim::GridSize3 grid_dim = { 16, 16, 16 };
 
     // Fluid source.
-    sim::FluidSource<sim::SmokeData> source = { sim::GridIndex3(0, 1, 0),
-                                                sim::SmokeData(kInitialEmissionRate, 0) };
-
-    // Wall with set velocity.
-    sim::GridIndex3 wall_pos = sim::GridIndex3(0, 0, 0);
-    SphericalCoords<sim::Float> wall_velo_spherical =
+    sim::SmokeData source_emission = sim::SmokeData(kInitialEmissionRate, 0);
+    sim::GridIndex3 source_pos = sim::GridIndex3(0, 0, 0);
+    SphericalCoords<sim::Float> source_velocity_spherical =
         sphericalFromEuclidean(kInitialEmissionSpeed * glm::normalize(sim::Vector3(1, 1, 1)));
 };
 
@@ -1407,25 +1404,17 @@ static void ShowSettings(bool *p_open)
             if (newTreeNode("Fluid source")) {
 
                 // Source position.
-                positionControl("position", g_simulation_settings.source.pos);
+                positionControl("position", g_simulation_settings.source_pos);
 
                 // Concentration emission.
-                sliderControl("emission rate", g_simulation_settings.source.rate.concentration, 0.0f, 100.0f);
+                auto &emission = g_simulation_settings.source_emission;
+                sliderControl("emission rate", emission.concentration, 0.0f, 100.0f);
 
                 // Temperature rate.
                 // sliderControl("temperature rate", g_simulation_settings.source.rate.temperature, 0.0f, 100.0f);
 
-                ImGui::TreePop();
-            }
-
-            // Solid wall.
-            if (newTreeNode("Solid wall")) {
-
-                // Position.
-                positionControl("position", g_simulation_settings.wall_pos);
-
                 // Velocity.
-                auto &solid_v = g_simulation_settings.wall_velo_spherical;
+                auto &solid_v = g_simulation_settings.source_velocity_spherical;
                 sliderControl("velocity speed", solid_v.radius, 0.0f, 70.0f);
                 solid_v.radius = std::max(solid_v.radius, 0.0f);
                 sphericalAnglesControl("velocity direction", solid_v.azimuthal, solid_v.polar);
@@ -1828,12 +1817,13 @@ int main()
 
                 // Wall.
                 auto &wall = fluid_sim.solidCells().at(0);
-                wall.pos = g_simulation_settings.wall_pos;
-                wall.velocity = euclideanFromSpherical(g_simulation_settings.wall_velo_spherical);
+                wall.pos = g_simulation_settings.source_pos;
+                wall.velocity =
+                    euclideanFromSpherical(g_simulation_settings.source_velocity_spherical);
 
                 // Source.
-                const auto &source_pos = g_simulation_settings.source.pos;
-                const auto &source_rate = g_simulation_settings.source.rate;
+                const auto &source_pos = g_simulation_settings.source_pos;
+                const auto &source_rate = g_simulation_settings.source_emission;
                 auto &source = fluid_sim.grid().cell(source_pos);
                 source.concentration += dt * source_rate.concentration;
                 source.temperature += dt * source_rate.temperature;
