@@ -27,7 +27,7 @@ float rand(float n) { return fract(sin(n) * 43758.5453123); }
 float rand2(vec2 v, float ofs) { return rand(ofs + dot(v, vec2(12.9898,78.233))); }
 
 // Triangular PDF dither.
-// Optimal Dither and Noise Shaping in Image Processing, 2008, Cameron Nicklaus Christou.
+// Low Complexity, High Fidelity: The Rendering of INSIDE, GDC 2016
 float dither(vec2 uv, float time)
 {
     return (rand2(uv, time) + rand2(12.3456*uv, 76.5432*time) - 0.5) / 255.0;
