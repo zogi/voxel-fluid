@@ -193,6 +193,9 @@ void main() {
     vec3 background = vec3(1, 1, 1);
     radiance += transmittance * background;
 
+    // Gamma correction.
+    radiance = pow(radiance, vec3(1, 1, 1) * 0.4545);
+
     // Dither.
     if (ditheringEnabled()) {
         float t = fract(time);

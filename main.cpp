@@ -1325,16 +1325,6 @@ static void ShowSettings(bool *p_open)
                 // Dithering.
                 checkboxControl("enable dithering", g_render_settings.dither_voxels);
 
-                // sRGB.
-                const bool srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
-                bool f = srgb_enabled;
-                checkboxControl("enable sRGB", f);
-                if (f && !srgb_enabled) {
-                    glEnable(GL_FRAMEBUFFER_SRGB);
-                } else if (!f && srgb_enabled) {
-                    glDisable(GL_FRAMEBUFFER_SRGB);
-                }
-
                 ImGui::Spacing();
 
                 // Show cube.
@@ -1524,7 +1514,6 @@ int main()
 
     // Other GL state.
     glClearColor(1, 1, 1, 1);
-    glEnable(GL_FRAMEBUFFER_SRGB);
 
     // Set up a buffer for common uniforms.
     GLUBO common_ubo = GLUBO::create();
