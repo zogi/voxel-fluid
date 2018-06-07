@@ -535,13 +535,13 @@ struct GUIState {
 };
 
 struct RenderSettings {
-    RGBColor voxel_transmit_color = { glm::vec3(60, 195, 222) / 255.0f };
-    float voxel_extinction_intensity = 50.0f;
+    RGBColor voxel_transmit_color = { glm::vec3(60, 127, 222) / 255.0f };
+    float voxel_extinction_intensity = 200.0f;
     RGBColor surface_color = glm::vec3(1, 1, 1);
     float surface_opacity = 0.008;
     float surface_roughness = 0.425;
     float surface_level = 0;
-    int voxel_density_quantization = 32;
+    int voxel_density_quantization = 8;
     glm::vec3 volume_origin = { 0, 0, 0 };
     glm::vec3 volume_size = { 4, 4, 4 };
 
