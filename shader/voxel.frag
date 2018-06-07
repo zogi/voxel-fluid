@@ -8,6 +8,10 @@ layout(std140, binding=2) uniform GridData {
     vec3 voxel_size; // size / grid_dim
     vec3 voxel_extinction;
     uint grid_flags;
+    vec3 surface_color;
+    float surface_opacity;
+    float surface_roughness;
+    float surface_level;
 };
 
 #define GRID_FLAGS_DENSITY_QUANTIZATION_MASK 0xff
@@ -179,18 +183,18 @@ void main() {
         float density = getVoxelDensity(index);
 
         // Reflect light on fluid-air interface.
-        bool inside_fluid_next = density > 0;
+        bool inside_fluid_next = density > surface_level;
         if (inside_fluid_next != inside_fluid) {
             vec3 Li = background;
             vec3 wo = -ray.direction;
             vec3 wi = -reflect(wo, normal);
 
             // Add reflected radiance contribution.
-            BRDFResult surface = GGX_Specular(wi, wo, normal, 0.0, 0.2);
-            radiance += exp(-tau) * opacity * surface.brdf * Li;
+            BRDFResult surface = GGX_specular(wi, wo, normal, 0.0, surface_roughness);
+            radiance += exp(-tau) * surface_opacity * surface_color * surface.brdf * Li;
 
             // Attenuate light coming from behind the surface by increasing the optical thickness.
-            tau += -log(1 - opacity * surface.F + 1e-6);
+            tau += -log(1 - surface_opacity * surface.F + 1e-6);
         }
         inside_fluid = inside_fluid_next;
 

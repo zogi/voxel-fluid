@@ -238,6 +238,11 @@ struct GridData {
 
     RGBColor voxel_extinction;
     uint32_t grid_flags;
+
+    RGBColor surface_color;
+    float surface_opacity;
+    float surface_roughness;
+    float surface_level;
 };
 #pragma pack(pop)
 
@@ -532,6 +537,10 @@ struct GUIState {
 struct RenderSettings {
     RGBColor voxel_transmit_color = { glm::vec3(60, 195, 222) / 255.0f };
     float voxel_extinction_intensity = 50.0f;
+    RGBColor surface_color = glm::vec3(1, 1, 1);
+    float surface_opacity = 0.008;
+    float surface_roughness = 0.425;
+    float surface_level = 0;
     int voxel_density_quantization = 32;
     glm::vec3 volume_origin = { 0, 0, 0 };
     glm::vec3 volume_size = { 4, 4, 4 };
@@ -1290,7 +1299,7 @@ static void ShowSettings(bool *p_open)
 
         if (newTreeNode("Rendering")) {
 
-            if (newTreeNode("Voxel rendering")) {
+            if (newTreeNode("Volume params")) {
 
                 // Voxel transmittance.
                 colorControl("transmit color", g_render_settings.voxel_transmit_color);
@@ -1299,6 +1308,18 @@ static void ShowSettings(bool *p_open)
 
                 // Density quantization.
                 sliderControl("density quantization", g_render_settings.voxel_density_quantization, 1, 255);
+
+                ImGui::TreePop();
+            }
+
+            if (newTreeNode("Surface params", false)) {
+
+                // Surface opacity.
+                colorControl("color", g_render_settings.surface_color);
+                sliderControl("opacity", g_render_settings.surface_opacity, 0.0f, 1.0f);
+
+                // Surface level.
+                sliderControl("level", g_render_settings.surface_level, 0.0f, 1.0f);
 
                 ImGui::TreePop();
             }
@@ -1978,6 +1999,11 @@ int main()
                 grid_data.voxel_extinction = extinction;
                 grid_data.grid_flags = packGridFlags(
                     g_render_settings.voxel_density_quantization, g_render_settings.dither_voxels);
+
+                grid_data.surface_color = g_render_settings.surface_color;
+                grid_data.surface_opacity = g_render_settings.surface_opacity;
+                grid_data.surface_roughness = g_render_settings.surface_roughness;
+                grid_data.surface_level = g_render_settings.surface_level;
 
                 void *ubo_ptr = glMapNamedBuffer(grid_data_ubo, GL_WRITE_ONLY);
                 memcpy(ubo_ptr, &grid_data, sizeof(grid_data));
