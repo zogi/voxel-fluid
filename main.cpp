@@ -233,6 +233,8 @@ struct GridData {
     uint32_t _pad2;
     glm::ivec3 grid_dim;
     uint32_t _pad3;
+    glm::vec3 voxel_size;
+    uint32_t _pad4;
 
     RGBColor voxel_extinction;
     uint32_t grid_flags;
@@ -1407,7 +1409,7 @@ static void ShowSettings(bool *p_open)
                 // Velocity.
                 auto &vel = g_simulation_settings.source_velocity_spherical;
                 bool dragging = false;
-                dragging |= sliderControl("velocity speed", vel.radius, 0.0f, 70.0f);
+                dragging |= sliderControl("velocity magnitude", vel.radius, 0.0f, 70.0f);
                 vel.radius = std::max(vel.radius, 0.0f);
                 dragging |= sphericalAnglesControl("velocity direction", vel.azimuthal, vel.polar);
                 if (dragging) {
@@ -1969,6 +1971,7 @@ int main()
             {
                 grid_data.origin = g_render_settings.volume_origin;
                 grid_data.size = g_render_settings.volume_size;
+                grid_data.voxel_size = grid_data.size / glm::vec3(grid_data.grid_dim);
 
                 const auto extinction = g_render_settings.voxel_extinction_intensity *
                                         (glm::vec3(1, 1, 1) - g_render_settings.voxel_transmit_color);

@@ -5,6 +5,7 @@ layout(std140, binding=2) uniform GridData {
     vec3 origin;
     vec3 size;
     ivec3 grid_dim;
+    vec3 voxel_size; // size / grid_dim
     vec3 voxel_extinction;
     uint grid_flags;
 };
@@ -71,8 +72,8 @@ float max3(vec3 v)
     return max(v.x, max(v.y, v.z));
 }
 
-// Return ray parameterns (t values) which makes the ray reach the a given
-// coordinate of p. Return the three such t values in a vector.
+// Compute ray parameters (t values) to reach p along the three axis.
+// Return the three such t values in a vector.
 vec3 paramToPoint(Ray ray, vec3 p)
 {
     return (p - ray.origin) / ray.direction;
@@ -103,14 +104,22 @@ vec3 getVoxelOrigin(ivec3 i)
     return origin + i * size / grid_dim;
 }
 
-vec3 getVoxelExtinction(ivec3 index)
+bool isOutOfGrid(ivec3 index)
+{
+    return any(lessThan(index, ivec3(0, 0, 0))) || any(greaterThanEqual(index, grid_dim));
+}
+
+float getVoxelDensity(ivec3 index)
 {
     int density_quantization = densityQuantization();
     float density = texture(voxels, (vec3(index) + vec3(0.5, 0.5, 0.5)) / grid_dim).x;
     density = float(int(density * density_quantization)) / (density_quantization - 1);
-    density = clamp(density, 0, 1);
-    return voxel_extinction * density;
+    return clamp(density, 0, 1);
 }
+
+// Optical thickness threshold for ray termination.
+// exp(-8) < 0.001
+uniform vec3 tau_threshold = vec3(8, 8, 8);
 
 in vec2 uv;
 void main() {
@@ -154,8 +163,10 @@ void main() {
     // Optical depth since last interface.
     vec3 tau = vec3(0, 0, 0);
 
+    // Just constant white background for now.
+    vec3 background = vec3(1, 1, 1);
+
     // Perform DDA traversal.
-    vec3 voxel_size = size / grid_dim;
     ivec3 i_step = ivec3(sign_direction);
     vec3 t_step = abs(voxel_size / ray.direction);
     vec3 p_entry = getRayPos(ray, t_in + 1e-5);
@@ -165,32 +176,37 @@ void main() {
     bool inside_fluid = false;
     vec3 opacity = vec3(1, 1, 1)*0.01;
     for (int i = 0; i < 100; ++i) {
-        vec3 extinction = getVoxelExtinction(index);
-        bool inside_fluid_next = dot(extinction, vec3(1, 1, 1) / 3.0f) > 0.1;
+        float density = getVoxelDensity(index);
+
+        // Reflect light on fluid-air interface.
+        bool inside_fluid_next = density > 0;
         if (inside_fluid_next != inside_fluid) {
-            vec3 Li = vec3(1, 1, 1);
+            vec3 Li = background;
             vec3 wo = -ray.direction;
             vec3 wi = -reflect(wo, normal);
-            vec3 albedo = vec3(0, 0, 0);
-            BRDFResult surface = BRDF(wi, wo, normal, 0.0, 0.2, albedo);
+
+            // Add reflected radiance contribution.
+            BRDFResult surface = GGX_Specular(wi, wo, normal, 0.0, 0.2);
             radiance += exp(-tau) * opacity * surface.brdf * Li;
-            tau += -log((1 - opacity) + opacity * (1 - surface.F));
+
+            // Attenuate light coming from behind the surface by increasing the optical thickness.
+            tau += -log(1 - opacity * surface.F + 1e-6);
         }
         inside_fluid = inside_fluid_next;
 
+        // Step to the next cell.
         float t_next = min(t_out, min3(t3));
         bvec3 mask = minMask(t3);
         index += i_step * ivec3(mask);
         t3 += t_step * ivec3(mask);
-        tau += extinction * (t_next - t);
+        tau += (t_next - t) * density * voxel_extinction;
         t = t_next;
-        if (t >= t_out || any(lessThan(index, ivec3(0, 0, 0))) || any(greaterThanEqual(index, grid_dim))) {
+        if (t >= t_out || isOutOfGrid(index) || all(greaterThan(tau, tau_threshold))) {
             break;
         }
         normal = -sign_direction * vec3(mask);
     }
     vec3 transmittance = exp(-tau);
-    vec3 background = vec3(1, 1, 1);
     radiance += transmittance * background;
 
     // Gamma correction.

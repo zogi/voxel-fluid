@@ -35,18 +35,17 @@ float G_SchlicksmithGGX(float dotNL, float dotNV, float roughness)
 // Fresnel function ----------------------------------------------------
 vec3 F_Schlick(float cosTheta, float metallic)
 {
-    vec3 F0 = mix(vec3(0.04), materialcolor(), metallic); // * material.specular
+    vec3 F0 = mix(vec3(0.04), materialcolor(), metallic);
     vec3 F = F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
     return F;
 }
-
 
 struct BRDFResult {
     vec3 brdf;
     vec3 F;
 };
 // Not actually the brdf value, but the brdf times N dot L.
-BRDFResult BRDF(vec3 L, vec3 V, vec3 N, float metallic, float roughness, vec3 albedo)
+BRDFResult GGX_specular(vec3 L, vec3 V, vec3 N, float metallic, float roughness)
 {
     float dotNL = clamp(dot(N, L), 0.0, 1.0);
 
@@ -68,8 +67,7 @@ BRDFResult BRDF(vec3 L, vec3 V, vec3 N, float metallic, float roughness, vec3 al
         vec3 F = F_Schlick(dotNV, metallic);
 
         vec3 spec_brdf = D * F * G / (4.0 * dotNL * dotNV);
-        vec3 diff_brdf = (1 - F) * albedo / PI;
-        res.brdf = (diff_brdf + spec_brdf) * dotNL;
+        res.brdf = spec_brdf * dotNL;
         res.F = F;
     }
 
