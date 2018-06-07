@@ -121,6 +121,48 @@ float getVoxelDensity(ivec3 index)
     return clamp(density, 0, 1);
 }
 
+struct DDAData
+{
+    ivec3 i_step;
+    vec3 t_step;
+    ivec3 index;
+    vec3 t3;
+};
+
+void DDAInit(Ray ray, ivec3 start_index, inout DDAData data)
+{
+    data.i_step = ivec3(sign(ray.direction));
+    data.t_step = abs(voxel_size / ray.direction);
+    data.index = start_index;
+    data.t3 = paramToPoint(ray, getVoxelOrigin(start_index + clamp(data.i_step, 0, 1)));
+}
+
+void DDAStep(inout DDAData data)
+{
+    bvec3 mask = minMask(data.t3);
+    data.index += data.i_step * ivec3(mask);
+    data.t3 += data.t_step * ivec3(mask);
+}
+
+vec3 traceTransmittance(Ray ray, ivec3 start_index, int niter)
+{
+    DDAData data;
+    DDAInit(ray, start_index, data);
+    vec3 tau = vec3(0, 0, 0);
+    float t = 0;
+    for (int i = 0; i < niter; ++i) {
+        if (isOutOfGrid(data.index)) {
+            break;
+        }
+        float density = getVoxelDensity(data.index);
+        float t_next = min3(data.t3);
+        tau += (t_next - t) * density * voxel_extinction;
+        t = t_next;
+        DDAStep(data);
+    }
+    return exp(-tau);
+}
+
 // Optical thickness threshold for ray termination.
 // exp(-8) < 0.001
 uniform vec3 tau_threshold = vec3(8, 8, 8);
@@ -178,16 +220,21 @@ void main() {
     vec3 t3 = paramToPoint(ray, getVoxelOrigin(index + clamp(i_step, 0, 1)));
     float t = t_in;
     bool inside_fluid = false;
-    vec3 opacity = vec3(1, 1, 1)*0.01;
-    for (int i = 0; i < 100; ++i) {
+    ivec3 prev_index = index;
+    for (int i = 0; i < 80; ++i) {
         float density = getVoxelDensity(index);
 
         // Reflect light on fluid-air interface.
         bool inside_fluid_next = density > surface_level;
         if (inside_fluid_next != inside_fluid) {
-            vec3 Li = background;
             vec3 wo = -ray.direction;
             vec3 wi = -reflect(wo, normal);
+            Ray reflected;
+            reflected.origin = getRayPos(ray, t);
+            reflected.direction = wi;
+
+            // Attenuate background radiance by attenuation along reflected direction.
+            vec3 Li = background * traceTransmittance(reflected, prev_index, 20);
 
             // Add reflected radiance contribution.
             BRDFResult surface = GGX_specular(wi, wo, normal, 0.0, surface_roughness);
@@ -197,6 +244,7 @@ void main() {
             tau += -log(1 - surface_opacity * surface.F + 1e-6);
         }
         inside_fluid = inside_fluid_next;
+        prev_index = index;
 
         // Step to the next cell.
         float t_next = min(t_out, min3(t3));
