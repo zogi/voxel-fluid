@@ -16,5 +16,9 @@ class FluidConan(ConanFile):
 
     def build(self):
         cmake = CMake(self)
+        cmake.definitions.update(
+            { "BUILD_TESTS": True
+            , "USE_CONAN": True
+            })
         cmake.configure(source_dir=self.source_folder)
         cmake.build()
