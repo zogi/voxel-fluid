@@ -31,6 +31,7 @@
 
 #include <array>
 #include <bitset>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <limits>

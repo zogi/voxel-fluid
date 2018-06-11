@@ -579,6 +579,9 @@ struct SimulationSettings {
 
 struct OverlayData {
     int fluid_cell_count = 0;
+    float voxel_draw_ms = 0;
+    float advect_ms = 0;
+    float pressure_projection_ms = 0;
 };
 
 static Framebuffer g_framebuffer;
@@ -1193,6 +1196,10 @@ static void ShowOverlay(bool *p_open)
         ImGui::Text("Camera direction: (%.2f,%.2f,%.2f)", d.x, d.y, d.z);
         ImGui::Spacing();
         ImGui::Text("Fluid cells: %d/%d", g_overlay_data.fluid_cell_count, sim::FluidSim::MAX_FLUID_CELL_COUNT);
+        ImGui::Spacing();
+        ImGui::Text("Fluid draw ms: %.2f", g_overlay_data.voxel_draw_ms);
+        ImGui::Text("Advect fluid ms: %.2f", g_overlay_data.advect_ms);
+        ImGui::Text("Pressure projection ms: %.2f", g_overlay_data.pressure_projection_ms);
         // ImGui::Separator();
         if (ImGui::BeginPopupContextWindow()) {
             if (ImGui::MenuItem("Top-left", NULL, corner == 0))
@@ -1470,6 +1477,23 @@ static void ShowSettings(bool *p_open)
     ImGui::End();
 }
 
+class ScopedTimer {
+public:
+    ScopedTimer(float &out_ms) : m_start(Clock::now()), m_out_ms(out_ms) {}
+    ~ScopedTimer()
+    {
+        const auto duration = Clock::now() - m_start;
+        const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+        m_out_ms = 1e-3f * float(duration_us.count());
+    }
+
+private:
+    typedef std::chrono::steady_clock Clock;
+    typedef Clock::time_point TimePoint;
+    typedef Clock::duration Duration;
+    TimePoint m_start;
+    float &m_out_ms;
+};
 
 int main()
 {
@@ -1851,6 +1875,7 @@ int main()
                 !g_simulation_settings.step_by_step || g_simulation_settings.do_pressure_step;
             if (do_advection) {
                 rmt_ScopedCPUSample(AppFluidSimAdvect, 0);
+                ScopedTimer timer(g_overlay_data.advect_ms);
 
                 // Track time for animation.
                 static float time = 0;
@@ -1917,8 +1942,10 @@ int main()
                 }
             }
 
+            // Pressure projection.
             if (do_pressure) {
                 rmt_ScopedCPUSample(AppFluidSimPressureSolve, 0);
+                ScopedTimer timer(g_overlay_data.pressure_projection_ms);
 
                 fluid_sim.setSolverMaxIterations(g_simulation_settings.max_solver_iterations);
                 fluid_sim.pressureSolve();
@@ -2085,10 +2112,20 @@ int main()
             // Draw fluid volume.
             {
                 rmt_ScopedOpenGLSample(DrawVolumeGL);
+                GLuint queries[2];
+                glGenQueries(2, queries);
+                glQueryCounter(queries[0], GL_TIMESTAMP);
 
                 glBindVertexArray(quad_vao);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
                 GL_CHECK();
+
+                glQueryCounter(queries[1], GL_TIMESTAMP);
+                GLuint64 start, end;
+                glGetQueryObjectui64v(queries[0], GL_QUERY_RESULT, &start);
+                glGetQueryObjectui64v(queries[1], GL_QUERY_RESULT, &end);
+                glDeleteQueries(2, queries);
+                g_overlay_data.voxel_draw_ms = float((end - start) / 1000ULL) * 1e-3f;
             }
 
             // Unbind depth texture.
