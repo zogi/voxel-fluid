@@ -357,7 +357,7 @@ public:
 
     bool isFluidCell(int i, int j, int k) const
     {
-        constexpr Float CONCENTRATION_EMPTY_THRESHOLD = Float(1e-6);
+        constexpr Float CONCENTRATION_EMPTY_THRESHOLD = Float(1e-2);
         const auto &cell = grid().cell(i, j, k);
         return cell.concentration >= CONCENTRATION_EMPTY_THRESHOLD;
     }
@@ -518,7 +518,7 @@ void FluidSim::pressureSolve()
     const auto setupRHS = [this]() {
         rmt_ScopedCPUSample(FluidSim_PressureSolve_SetupRHS, 0);
 
-        const auto &grid = this->grid();
+        auto &grid = this->grid();
         FluidCellIndex idx = 0;
         m_cell_neighbors.clear();
         m_fluid_cell_grid_index.clear();
@@ -526,8 +526,10 @@ void FluidSim::pressureSolve()
         for (int i = 0; i < m_size.x; ++i)
             for (int j = 0; j < m_size.y; ++j)
                 for (int k = 0; k < m_size.z; ++k) {
-                    if (idx == MAX_FLUID_CELL_COUNT)
-                        return;
+                    if (idx == MAX_FLUID_CELL_COUNT) {
+                        grid.cell(i, j, k) = SmokeData(0, 0);
+                        continue;
+                    }
 
                     if (!isFluidCell(i, j, k)) {
                         continue;
@@ -547,8 +549,30 @@ void FluidSim::pressureSolve()
 
                     ++idx;
                 }
+    };
+    setupRHS();
 
-        // Add terms due to solid boundaries.
+    // Zero out air-air velocities.
+    for (int i = 0; i <= m_size.x; ++i)
+        for (int j = 0; j <= m_size.y; ++j)
+            for (int k = 0; k <= m_size.z; ++k) {
+                if (isFluidCellBoundsChecked(i, j, k)) {
+                    continue;
+                }
+                if (j != m_size.y && k != m_size.z && !isFluidCellBoundsChecked(i - 1, j, k)) {
+                    grid().u(i, j, k) = 0;
+                }
+                if (i != m_size.x && k != m_size.z && !isFluidCellBoundsChecked(i, j - 1, k)) {
+                    grid().v(i, j, k) = 0;
+                }
+                if (i != m_size.x && j != m_size.y && !isFluidCellBoundsChecked(i, j, k - 1)) {
+                    grid().w(i, j, k) = 0;
+                }
+            }
+
+    // Add terms due to solid boundaries.
+    {
+        const auto &grid = this->grid();
         const auto scale = grid.oneOverDx();
         for (const auto solid : m_solid_cells) {
             const int i = solid.pos.x;
@@ -585,8 +609,7 @@ void FluidSim::pressureSolve()
                 m_pressure_rhs[idx] -= scale * (grid.w(i, j, k + 1) - solid.velocity.z);
             }
         }
-    };
-    setupRHS();
+    }
 
     // Set up the matrix.
     {
@@ -600,7 +623,7 @@ void FluidSim::pressureSolve()
         m_pressure_mtx.setZero();
 
         if (fluid_cell_count == 0) {
-            // Nothing to do if there are no fluids.
+            // Nothing to do if there are no fluid cells.
             return;
         }
 

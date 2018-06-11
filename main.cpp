@@ -1899,6 +1899,15 @@ int main()
                 }
             }
 
+            // Slowly decrease concentration in fluid cells.
+            {
+                for (auto &cell : fluid_sim.grid()) {
+                    if (cell.concentration > 0) {
+                        cell.concentration = std::max(0.0f, cell.concentration - g_time_delta * 1e-2f);
+                    }
+                }
+            }
+
             if (do_pressure) {
                 rmt_ScopedCPUSample(AppFluidSimPressureSolve, 0);
 
