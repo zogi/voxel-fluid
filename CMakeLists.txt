@@ -73,12 +73,17 @@ target_include_directories(spdlog INTERFACE external/spdlog/include)
 add_library(jsoncpp STATIC external/jsoncpp/jsoncpp.cpp)
 target_include_directories(jsoncpp PUBLIC external/jsoncpp)
 
+# perlin noise lib
+add_library(PerlinNoise INTERFACE)
+target_include_directories(PerlinNoise INTERFACE
+    ${PROJECT_SOURCE_DIR}/external/PerlinNoise)
+
 # My small fluid simulation library.
 add_library(fluid_sim INTERFACE)
 target_link_libraries(fluid_sim INTERFACE glm eigen)
 
 # Main executable.
-set(LIBS fluid_sim variant jsoncpp imgui remotery spdlog glfw glm glad)
+set(LIBS fluid_sim variant jsoncpp imgui remotery spdlog glfw glm glad PerlinNoise)
 file(GLOB SHADER shader/*)
 file(GLOB SRC *.cpp *.h)
 source_group(shader FILES ${SHADER})

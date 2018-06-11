@@ -8,6 +8,8 @@
 // spdlog includes windows.h on Windows, which should be included before glfw.
 #include <spdlog/spdlog.h>
 
+#include <PerlinNoise.hpp>
+
 // To prevent glad from including windows.h.
 #if defined(_WIN32) && !defined(APIENTRY)
 #define APIENTRY __stdcall

@@ -19,3 +19,6 @@
 [submodule "external/spdlog"]
 	path = external/spdlog
 	url = https://github.com/gabime/spdlog.git
+[submodule "external/PerlinNoise"]
+	path = external/PerlinNoise
+	url = https://github.com/Reputeless/PerlinNoise.git

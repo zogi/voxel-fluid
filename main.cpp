@@ -564,6 +564,9 @@ struct SimulationSettings {
     bool do_advection_step = false;
     bool do_pressure_step = false;
 
+    float curl_noise_strength = 0.0f;
+    float curl_noise_frequency = 3.0f;
+
     // Fluid grid dimensions.
     sim::GridSize3 grid_dim = { 16, 16, 16 };
 
@@ -1399,6 +1402,14 @@ static void ShowSettings(bool *p_open)
                 ImGui::TreePop();
             }
 
+            if (newTreeNode("Noise", false)) {
+                sliderControl("curl noise strength", g_simulation_settings.curl_noise_strength, 0.0f, 20.0f);
+                sliderControl(
+                    "curl noise frequency", g_simulation_settings.curl_noise_frequency, 1.0f, 16.0f);
+
+                ImGui::TreePop();
+            }
+
             // Fluid density.
             // sliderControl("fluid density", g_simulation_settings.fluid_density, 0.1f, 100.0f);
 
@@ -1853,6 +1864,41 @@ int main()
                 // Advect.
                 fluid_sim.advect();
             }
+
+            // Add curl noise.
+            {
+                siv::PerlinNoise perlin(0);
+
+                const float noiseSize = g_simulation_settings.curl_noise_frequency;
+                auto &grid = fluid_sim.grid();
+                const auto size = grid.size();
+                const auto delta = 1e-1f * glm::vec3(1, 1, 1);
+                const auto dx = delta.x, dy = delta.y, dz = delta.z;
+                const auto norm = glm::vec3(1, 1, 1) / (2.0f * delta);
+                for (int i = 0; i < size.x; ++i) {
+                    const float x = noiseSize * float(i) / float(size.x);
+                    for (int j = 0; j < size.y; ++j) {
+                        const float y = noiseSize * float(j) / float(size.y);
+                        for (int k = 0; k < size.z; ++k) {
+                            const float z = noiseSize * float(k) / float(size.z);
+                            glm::vec3 curl =
+                                glm::vec3{ perlin.noise(x + dx, y, z) - perlin.noise(x - dx, y, z),
+                                           perlin.noise(x, y + dy, z) - perlin.noise(x, y - dy, z),
+                                           perlin.noise(x, y, z + dz) - perlin.noise(x, y, z - dz) };
+                            curl *= norm;
+                            const auto v =
+                                g_simulation_settings.curl_noise_strength * g_time_delta * curl;
+                            grid.u(i, j, k) += 0.5f * v.x;
+                            grid.u(i + 1, j, k) += 0.5f * v.x;
+                            grid.v(i, j, k) += 0.5f * v.y;
+                            grid.v(i, j + 1, k) += 0.5f * v.y;
+                            grid.w(i, j, k) += 0.5f * v.z;
+                            grid.w(i, j, k + 1) += 0.5f * v.z;
+                        }
+                    }
+                }
+            }
+
             if (do_pressure) {
                 rmt_ScopedCPUSample(AppFluidSimPressureSolve, 0);
 
