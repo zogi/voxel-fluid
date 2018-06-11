@@ -1822,6 +1822,8 @@ int main()
 
         // Build GUI.
         {
+            g_overlay_data.fluid_cell_count = fluid_sim.fluidCellCount();
+
             if (g_gui_state.console_open)
                 console.Draw("console", &g_gui_state.console_open);
             if (g_gui_state.overlay_open)
