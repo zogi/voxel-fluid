@@ -1283,7 +1283,7 @@ static void ShowSettings(bool *p_open)
         float angles[2];
         angles[0] = glm::degrees(polar_rad);
         angles[1] = -glm::degrees(azimuthal_rad);
-        const auto res = ImGui::DragFloat2("", angles, 0.1f);
+        const auto res = ImGui::DragFloat2("", angles, 0.2f);
         polar_rad = glm::radians(angles[0]);
         azimuthal_rad = -glm::radians(angles[1]);
 
@@ -1448,7 +1448,7 @@ static void ShowSettings(bool *p_open)
                 // Velocity.
                 auto &vel = g_simulation_settings.source_velocity_spherical;
                 bool dragging = false;
-                dragging |= sliderControl("velocity magnitude", vel.radius, 0.0f, 70.0f);
+                dragging |= sliderControl("velocity magnitude", vel.radius, 0.0f, 100.0f);
                 vel.radius = std::max(vel.radius, 0.0f);
                 dragging |= sphericalAnglesControl("velocity direction", vel.azimuthal, vel.polar);
                 if (dragging) {
