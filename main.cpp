@@ -577,10 +577,15 @@ struct SimulationSettings {
         sphericalFromEuclidean(kInitialEmissionSpeed * glm::normalize(sim::Vector3(1, 1, 1)));
 };
 
+struct OverlayData {
+    int fluid_cell_count = 0;
+};
+
 static Framebuffer g_framebuffer;
 static Camera g_camera;
 static float g_time_delta = 0;
 static GUIState g_gui_state;
+static OverlayData g_overlay_data;
 static RenderSettings g_render_settings;
 static SimulationSettings g_simulation_settings;
 
@@ -1186,6 +1191,8 @@ static void ShowOverlay(bool *p_open)
         const auto &d = g_camera.getForwardVector();
         ImGui::Text("Camera position: (%.2f,%.2f,%.2f)", p.x, p.y, p.z);
         ImGui::Text("Camera direction: (%.2f,%.2f,%.2f)", d.x, d.y, d.z);
+        ImGui::Spacing();
+        ImGui::Text("Fluid cells: %d/%d", g_overlay_data.fluid_cell_count, sim::FluidSim::MAX_FLUID_CELL_COUNT);
         // ImGui::Separator();
         if (ImGui::BeginPopupContextWindow()) {
             if (ImGui::MenuItem("Top-left", NULL, corner == 0))

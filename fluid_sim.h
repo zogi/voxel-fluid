@@ -384,6 +384,8 @@ public:
 
     void setSolverMaxIterations(int max_iterations) { m_solver.setMaxIterations(max_iterations); }
 
+    int fluidCellCount() const { return m_cell_neighbors.size(); }
+
 private:
     const GridSize3 m_size;
     const Float m_dx, m_dt;
