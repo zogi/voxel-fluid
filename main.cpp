@@ -1653,7 +1653,7 @@ int main()
     Console console;
 
     // Init fluid simulator and voxel texture.
-    const auto grid_dim = glm::ivec3(16, 16, 16);
+    const auto grid_dim = g_simulation_settings.grid_dim;
     GridData grid_data;
     grid_data.grid_dim = grid_dim;
     grid_data.origin = g_render_settings.volume_origin;
