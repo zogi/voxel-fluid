@@ -1455,7 +1455,7 @@ static void ShowSettings(bool *p_open)
                 // Velocity.
                 auto &vel = g_simulation_settings.source_velocity_spherical;
                 bool dragging = false;
-                dragging |= sliderControl("velocity magnitude", vel.radius, 0.0f, 100.0f);
+                dragging |= sliderControl("velocity magnitude", vel.radius, 0.0f, 70.0f);
                 vel.radius = std::max(vel.radius, 0.0f);
                 dragging |= sphericalAnglesControl("velocity direction", vel.azimuthal, vel.polar);
                 if (dragging) {
