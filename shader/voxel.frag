@@ -164,7 +164,7 @@ vec3 traceTransmittance(Ray ray, ivec3 start_index, int niter)
 }
 
 // Optical thickness threshold for ray termination.
-// exp(-8) < 0.001
+// exp(-10) < 0.0001
 uniform vec3 tau_threshold = vec3(10, 10, 10);
 
 in vec2 uv;
