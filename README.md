@@ -8,7 +8,6 @@ conjugate gradient solver for pressure projection and a basic semi-Lagrangian me
 The voxels are rendered by tracing through a 3D density texture using DDA-style traversal computing the
 effect of volume absorption and reflection at air-fluid interfaces.
 Emtpy-space skipping and hierarchical data storage schemes are not implemented at this point.
-
 A triangular PDF dither (such as the one [used in INSIDE](https://www.youtube.com/watch?v=RdN06E6Xn9E&t=1259))
 is applied to the gamma corrected output to prevent banding.
 
