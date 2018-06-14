@@ -23,7 +23,7 @@ F3 toggles overlay display.
 First of all clone with --recursive, because this project uses submodules.
 
 After that just build with cmake. If you want to build the tests, either have google test available to cmake,
-use use conan for building.
+or use conan for building.
 
-I have developed this on Windows using an AMD GPU, but I have tested it a couple of times on Nnidia hardware too.
+I have developed this on Windows using an AMD GPU, but I have tested it a couple of times on Nvidia hardware too.
 However I haven't tested the project on Linux.
