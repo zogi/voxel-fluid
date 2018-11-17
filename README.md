@@ -11,6 +11,8 @@ Emtpy-space skipping and hierarchical data storage schemes are not implemented a
 A triangular PDF dither (such as the one [used in INSIDE](https://www.youtube.com/watch?v=RdN06E6Xn9E&t=1259))
 is applied to the gamma corrected output to prevent banding.
 
+[Link to video](https://youtu.be/uOcbevIBxqU)
+
 ## Running the demo
 
 The demo needs OpenGL 4.3+ and expects the *shader* folder to be present in the working directory.
